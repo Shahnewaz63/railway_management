@@ -2,6 +2,7 @@ const router = require("express").Router();
 const pool = require("../db/pool");
 const { requireAuth } = require("../middleware/auth");
 const { FARES, HOLD_MINUTES } = require("../config/fares");
+const { isPlainObject, normalizePassengerName, normalizePnr, normalizeStationCode, parsePositiveId, parsePassengerAge } = require("../lib/request-validation");
 
 function httpError(status, message) {
   const e = new Error(message);
@@ -46,14 +47,27 @@ async function loadBookingFull(pnr) {
 
 // Create a pending booking + tickets. This is the moment the 5-minute hold starts.
 router.post("/", requireAuth, async (req, res, next) => {
-  const { trip_id, coach_id, seats, from, to } = req.body || {};
-  if (!trip_id || !coach_id || !Array.isArray(seats) || seats.length === 0 || !from || !to) {
+  const { trip_id, coach_id, seats } = req.body || {};
+  const tripId = parsePositiveId(trip_id);
+  const coachId = parsePositiveId(coach_id);
+  const from = normalizeStationCode(req.body?.from);
+  const to = normalizeStationCode(req.body?.to);
+  if (!tripId || !coachId || !Array.isArray(seats) || seats.length === 0 || seats.length > 10 || !from || !to || from === to) {
     return res.status(400).json({ error: "trip_id, coach_id, seats, from and to are required." });
   }
+  const passengers = [];
   for (const s of seats) {
-    if (!s.seat_id || !s.passenger_name || !String(s.passenger_name).trim() || !s.passenger_age || Number(s.passenger_age) <= 0) {
+    if (!isPlainObject(s)) return res.status(400).json({ error: "Every passenger entry must be an object." });
+    const seatId = parsePositiveId(s.seat_id);
+    const passengerName = normalizePassengerName(s.passenger_name);
+    const passengerAge = parsePassengerAge(s.passenger_age);
+    if (!seatId || !passengerName || !passengerAge) {
       return res.status(400).json({ error: "Please provide a valid name and age for every passenger." });
     }
+    passengers.push({ seatId, passengerName, passengerAge });
+  }
+  if (new Set(passengers.map((passenger) => passenger.seatId)).size !== passengers.length) {
+    return res.status(400).json({ error: "Each selected seat must be unique." });
   }
 
   const client = await pool.connect();
@@ -63,39 +77,53 @@ router.post("/", requireAuth, async (req, res, next) => {
     // Lock each (trip, seat) pair so two simultaneous requests for the same
     // seat can never both pass the availability check — the second request
     // blocks here until the first transaction commits or rolls back.
-    for (const s of seats) {
-      await client.query("SELECT pg_advisory_xact_lock($1, $2)", [Number(trip_id), Number(s.seat_id)]);
+    for (const passenger of passengers) {
+      await client.query("SELECT pg_advisory_xact_lock($1, $2)", [tripId, passenger.seatId]);
     }
 
-    const coachRes = await client.query("SELECT * FROM coach WHERE coach_id = $1", [coach_id]);
+    const coachRes = await client.query(
+      `SELECT c.* FROM coach c JOIN trip t ON t.train_id = c.train_id
+       WHERE c.coach_id = $1 AND t.trip_id = $2`,
+      [coachId, tripId]
+    );
     if (!coachRes.rowCount) throw httpError(404, "Coach not found.");
     const coach = coachRes.rows[0];
     const fareEach = FARES[coach.coach_type] ?? 0;
 
-    const seatIds = seats.map((s) => Number(s.seat_id));
+    const seatIds = passengers.map((passenger) => passenger.seatId);
+    const seatsRes = await client.query("SELECT seat_id FROM seat WHERE coach_id = $1 AND seat_id = ANY($2::int[])", [coachId, seatIds]);
+    if (seatsRes.rowCount !== seatIds.length) throw httpError(400, "Every selected seat must belong to the selected coach.");
+    const journeyRes = await client.query(
+      `SELECT 1 FROM trip t
+       JOIN route_station rs_from ON rs_from.route_id = t.route_id AND rs_from.station_code = $2
+       JOIN route_station rs_to ON rs_to.route_id = t.route_id AND rs_to.station_code = $3
+       WHERE t.trip_id = $1 AND rs_from.stop_order < rs_to.stop_order`,
+      [tripId, from, to]
+    );
+    if (!journeyRes.rowCount) throw httpError(400, "This trip does not serve the selected journey.");
     const takenRes = await client.query(
       `SELECT tk.seat_id FROM ticket tk
        JOIN booking b ON b.pnr_number = tk.pnr_number
        WHERE tk.trip_id = $1 AND tk.seat_id = ANY($2::int[])
          AND (b.booking_status = 'confirmed'
               OR (b.booking_status = 'pending' AND now() - b.booking_date < interval '${HOLD_MINUTES} minutes'))`,
-      [trip_id, seatIds]
+      [tripId, seatIds]
     );
     if (takenRes.rowCount) throw httpError(409, "This seat is no longer available. Please select another seat.");
 
     const pnr = genPnr();
-    const fare = fareEach * seats.length;
+    const fare = fareEach * passengers.length;
 
     await client.query(
       `INSERT INTO booking (pnr_number, user_id, starts_at_station, ends_at_station, booking_date, booking_status, fare)
        VALUES ($1,$2,$3,$4, now(), 'pending', $5)`,
       [pnr, req.user.user_id, from, to, fare]
     );
-    for (const s of seats) {
+    for (const passenger of passengers) {
       await client.query(
         `INSERT INTO ticket (pnr_number, trip_id, seat_id, passenger_name, passenger_age, price)
          VALUES ($1,$2,$3,$4,$5,$6)`,
-        [pnr, trip_id, s.seat_id, String(s.passenger_name).trim(), Number(s.passenger_age), fareEach]
+        [pnr, tripId, passenger.seatId, passenger.passengerName, passenger.passengerAge, fareEach]
       );
     }
 
@@ -128,7 +156,9 @@ router.get("/", requireAuth, async (req, res, next) => {
 
 router.get("/:pnr", requireAuth, async (req, res, next) => {
   try {
-    const full = await loadBookingFull(req.params.pnr);
+    const pnr = normalizePnr(req.params.pnr);
+    if (!pnr) return res.status(400).json({ error: "Invalid booking reference." });
+    const full = await loadBookingFull(pnr);
     if (!full) return res.status(404).json({ error: "Booking not found." });
     if (full.booking.user_id !== req.user.user_id) return res.status(403).json({ error: "This booking does not belong to you." });
     res.json(full);
@@ -139,9 +169,9 @@ router.get("/:pnr", requireAuth, async (req, res, next) => {
 
 // Verifies expiry and prior payment server-side — never trusts the client.
 router.post("/:pnr/pay", requireAuth, async (req, res, next) => {
-  const { pnr } = req.params;
+  const pnr = normalizePnr(req.params.pnr);
   const { method } = req.body || {};
-  if (!method) return res.status(400).json({ error: "Payment method is required." });
+  if (!pnr || !["bKash", "Nagad", "Card"].includes(method)) return res.status(400).json({ error: "A valid booking reference and payment method are required." });
 
   const client = await pool.connect();
   try {
@@ -181,6 +211,30 @@ router.post("/:pnr/pay", requireAuth, async (req, res, next) => {
     next(err);
   } finally {
     client.release();
+  }
+});
+
+// A customer can explicitly abandon only their own unpaid hold. This releases
+// the seats immediately because availability ignores cancelled bookings.
+router.delete("/:pnr", requireAuth, async (req, res, next) => {
+  const pnr = normalizePnr(req.params.pnr);
+  if (!pnr) return res.status(400).json({ error: "Invalid booking reference." });
+
+  try {
+    const { rows } = await pool.query(
+      `UPDATE booking
+       SET booking_status = 'cancelled'
+       WHERE pnr_number = $1
+         AND user_id = $2
+         AND booking_status = 'pending'
+         AND now() - booking_date < interval '${HOLD_MINUTES} minutes'
+       RETURNING pnr_number, booking_status`,
+      [pnr, req.user.user_id]
+    );
+    if (!rows.length) return res.status(409).json({ error: "Only your active pending booking can be cancelled." });
+    res.status(204).end();
+  } catch (err) {
+    next(err);
   }
 });
 

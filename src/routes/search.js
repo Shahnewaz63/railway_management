@@ -1,12 +1,16 @@
 const router = require("express").Router();
 const pool = require("../db/pool");
 const { FARES, HOLD_MINUTES } = require("../config/fares");
+const { normalizeStationCode, parseIsoDate, parseOptionalEnum } = require("../lib/request-validation");
 
 // GET /api/search?from=DHK&to=CTG&date=2026-09-15&klass=Snigdha
 router.get("/", async (req, res, next) => {
   try {
-    const { from, to, date, klass } = req.query;
-    if (!from || !to || !date) return res.status(400).json({ error: "from, to and date are required." });
+    const from = normalizeStationCode(req.query.from);
+    const to = normalizeStationCode(req.query.to);
+    const date = parseIsoDate(req.query.date);
+    const classFilter = parseOptionalEnum(req.query.klass, Object.keys(FARES));
+    if (!from || !to || !date || !classFilter.valid) return res.status(400).json({ error: "Valid from, to, date and class values are required." });
     if (from === to) return res.status(400).json({ error: "Departure and destination stations must be different." });
 
     const stationsRes = await pool.query("SELECT station_code FROM station WHERE station_code IN ($1,$2)", [from, to]);
@@ -60,7 +64,7 @@ router.get("/", async (req, res, next) => {
         available: Number(r.total) - Number(r.taken),
         fare: FARES[r.coach_type] ?? 0,
       }));
-      if (klass) classes = classes.filter((c) => c.coach_type === klass);
+      if (classFilter.value) classes = classes.filter((c) => c.coach_type === classFilter.value);
 
       trips.push({ ...trip, classes });
     }

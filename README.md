@@ -9,6 +9,7 @@ A working full-stack prototype: **Express + PostgreSQL** backend, plain **React*
 database/
   schema.sql     DDL — matches the ER diagram exactly, plus one additive user_auth table
   seed.js        populates stations/routes/trains/coaches/seats/trips + a demo user
+  migrations/    additive migrations for existing databases
 src/
   db/pool.js             pg connection pool
   config/fares.js        FARES + CLASS_INFO (app-level, since there's no fare table)
@@ -28,7 +29,18 @@ public/
   app.jsx         the whole frontend (fetches the API above)
 ```
 
-## 1. Set up PostgreSQL
+## 1. Clone and install
+
+On a new device, install [Node.js](https://nodejs.org/) and PostgreSQL first.
+Then clone the repository and install its dependencies:
+
+```bash
+git clone <repository-url>
+cd railway_management
+npm install
+```
+
+## 2. Configure PostgreSQL
 
 Create a database and point `DATABASE_URL` at it:
 
@@ -38,17 +50,35 @@ cp .env.example .env
 # edit .env: DATABASE_URL, and set JWT_SECRET to a long random string
 ```
 
-## 2. Install, migrate, seed
+For example, you can generate a secret with:
 
 ```bash
-npm install
-npm run migrate   # runs database/schema.sql
-npm run seed      # populates reference data + a demo user
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 ```
 
-Demo login after seeding: **rahim@example.com / password123**
+Your `.env` is local-only and is ignored by Git. Never commit it or share it;
+each developer must create their own from `.env.example`.
 
-## 3. Run it
+## 3. Create the schema and demo data
+
+```bash
+npm run migrate   # runs database/schema.sql
+npm run seed      # populates reference data + demo customer/admin accounts
+```
+
+Demo customer login after seeding: **rahim@example.com / password123**
+
+Demo admin login after seeding: **admin@example.com / admin123**. Public registration always creates a customer account. Admins can view all users/bookings, grant or revoke other users' admin roles, and cancel pending or confirmed bookings.
+
+For an existing database created before these changes, run these one-time migrations instead of recreating it:
+
+```bash
+npm run migrate:roles
+npm run migrate:auth-sessions
+npm run migrate:constraints
+```
+
+## 4. Run it
 
 ```bash
 npm start          # or: npm run dev  (nodemon, auto-restart)
@@ -63,8 +93,9 @@ server or CORS setup to worry about.
 | Method | Path                                     | Auth | Notes |
 |---|---|---|---|
 | POST | `/api/auth/register`                     | –    | `{first_name,last_name,email,password}` |
-| POST | `/api/auth/login`                        | –    | `{email,password}` → `{token,user}` |
+| POST | `/api/auth/login`                        | –    | `{email,password}` → HTTP-only session cookie + `{user}` |
 | GET  | `/api/auth/me`                           | ✓    | returns the decoded token's user |
+| POST | `/api/auth/logout`                       | ✓    | revokes the server-side session and clears its cookie |
 | GET  | `/api/stations`                          | –    | all stations |
 | GET  | `/api/classes`                           | –    | distinct `coach_type`s + fare + description |
 | GET  | `/api/search?from&to&date&klass`         | –    | valid trips (route/stop_order aware) + live per-class availability |
@@ -74,6 +105,7 @@ server or CORS setup to worry about.
 | GET  | `/api/bookings`                          | ✓    | the logged-in user's bookings, with `effective_status` |
 | GET  | `/api/bookings/:pnr`                     | ✓    | full booking + tickets + payment |
 | POST | `/api/bookings/:pnr/pay`                 | ✓    | `{method}` — re-verifies the hold hasn't expired, then confirms |
+| DELETE | `/api/bookings/:pnr`                   | ✓    | cancels the caller's pending hold and releases its seats |
 
 All fares, seat availability, and booking status are computed server-side from
 the database on every request — the frontend never sends a price or an
@@ -102,12 +134,16 @@ application-level mapping rather than inventing a database field.
 separate `user_auth(user_id, password_hash)` table was added — additive, 1:1,
 and clearly called out in `schema.sql` as the one deliberate departure from the
 diagram, exactly as the "optional schema improvement" the original brief flagged.
+Login creates an HTTP-only, same-site session cookie. Its JWT session ID is also
+persisted in `auth_session`, so logout revokes the session and an old copied
+cookie/token cannot be reused.
 
 ## What's still prototype-grade
 
 - Payment is simulated (no real gateway) — the checkbox on the payment page
   lets you force a failed attempt to see that path.
-- No admin UI for managing trains/coaches/trips — use `psql` or extend
-  `database/seed.js`.
-- No rate limiting / refresh tokens — the JWT is a 7-day bearer token in
-  `localStorage`, fine for a demo, not for production.
+- The admin dashboard currently provides system counts only; management of
+  trains/coaches/trips still uses `psql` or `database/seed.js`.
+- No rate limiting / refresh-token rotation; the HTTP-only session cookie lasts
+  seven days, suitable for this course demonstration but not a complete
+  production security programme.

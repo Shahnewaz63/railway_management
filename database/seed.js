@@ -140,13 +140,21 @@ async function run() {
       }
     }
 
-    console.log("Seeding demo user (rahim@example.com / password123)...");
+    console.log("Seeding demo customer (rahim@example.com / password123)...");
     const uRes = await client.query(
-      "INSERT INTO users (first_name, last_name, email) VALUES ($1,$2,$3) RETURNING user_id",
+      "INSERT INTO users (first_name, last_name, email, role) VALUES ($1,$2,$3,'customer') RETURNING user_id",
       ["Rahim", "Uddin", "rahim@example.com"]
     );
     const hash = await bcrypt.hash("password123", 10);
     await client.query("INSERT INTO user_auth (user_id, password_hash) VALUES ($1,$2)", [uRes.rows[0].user_id, hash]);
+
+    console.log("Seeding demo admin (admin@example.com / admin123)...");
+    const adminRes = await client.query(
+      "INSERT INTO users (first_name, last_name, email, role) VALUES ($1,$2,$3,'admin') RETURNING user_id",
+      ["Admin", "User", "admin@example.com"]
+    );
+    const adminHash = await bcrypt.hash("admin123", 10);
+    await client.query("INSERT INTO user_auth (user_id, password_hash) VALUES ($1,$2)", [adminRes.rows[0].user_id, adminHash]);
 
     await client.query("COMMIT");
     console.log("Seed complete.");

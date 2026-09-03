@@ -1,11 +1,14 @@
 const router = require("express").Router();
 const pool = require("../db/pool");
 const { HOLD_MINUTES } = require("../config/fares");
+const { parsePositiveId, parseOptionalEnum } = require("../lib/request-validation");
+const { FARES } = require("../config/fares");
 
 router.get("/:tripId/coaches", async (req, res, next) => {
   try {
-    const { tripId } = req.params;
-    const { klass } = req.query;
+    const tripId = parsePositiveId(req.params.tripId);
+    const classFilter = parseOptionalEnum(req.query.klass, Object.keys(FARES));
+    if (!tripId || !classFilter.valid) return res.status(400).json({ error: "Invalid trip or class." });
 
     const tripRes = await pool.query(
       `SELECT t.*, tr.train_name FROM trip t JOIN train tr ON tr.train_id = t.train_id WHERE t.trip_id = $1`,
@@ -16,7 +19,7 @@ router.get("/:tripId/coaches", async (req, res, next) => {
 
     const coachRes = await pool.query(
       `SELECT * FROM coach WHERE train_id = $1 AND ($2::text IS NULL OR coach_type = $2) ORDER BY coach_number`,
-      [trip.train_id, klass || null]
+      [trip.train_id, classFilter.value]
     );
     res.json({ trip, coaches: coachRes.rows });
   } catch (err) {
@@ -26,8 +29,15 @@ router.get("/:tripId/coaches", async (req, res, next) => {
 
 router.get("/:tripId/coaches/:coachId/seats", async (req, res, next) => {
   try {
-    const { tripId, coachId } = req.params;
-    const coachRes = await pool.query("SELECT * FROM coach WHERE coach_id = $1", [coachId]);
+    const tripId = parsePositiveId(req.params.tripId);
+    const coachId = parsePositiveId(req.params.coachId);
+    if (!tripId || !coachId) return res.status(400).json({ error: "Invalid trip or coach." });
+    const coachRes = await pool.query(
+      `SELECT c.* FROM coach c
+       JOIN trip t ON t.train_id = c.train_id
+       WHERE c.coach_id = $1 AND t.trip_id = $2`,
+      [coachId, tripId]
+    );
     if (!coachRes.rowCount) return res.status(404).json({ error: "Coach not found." });
 
     const { rows } = await pool.query(

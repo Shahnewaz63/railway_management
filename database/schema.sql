@@ -20,7 +20,7 @@ CREATE TABLE route (
 CREATE TABLE route_station (
   route_id       INT NOT NULL REFERENCES route(route_id) ON DELETE CASCADE,
   station_code   VARCHAR(10) NOT NULL REFERENCES station(station_code) ON DELETE CASCADE,
-  stop_order     INT NOT NULL,
+  stop_order     INT NOT NULL CHECK (stop_order > 0),
   PRIMARY KEY (route_id, station_code)
 );
 
@@ -52,13 +52,16 @@ CREATE TABLE trip (
   route_id        INT NOT NULL REFERENCES route(route_id) ON DELETE CASCADE,
   departure_date  TIMESTAMP(6) NOT NULL,
   status          VARCHAR(20) NOT NULL DEFAULT 'scheduled'
+                  CHECK (status IN ('scheduled', 'cancelled', 'completed'))
 );
 
 CREATE TABLE users (
   user_id        SERIAL PRIMARY KEY,
   first_name     VARCHAR(50)  NOT NULL,
   last_name      VARCHAR(50)  NOT NULL,
-  email          VARCHAR(100) NOT NULL UNIQUE
+  email          VARCHAR(100) NOT NULL UNIQUE,
+  role           VARCHAR(20)  NOT NULL DEFAULT 'customer'
+                 CHECK (role IN ('customer', 'admin'))
 );
 
 -- Additive: not in the original diagram. Login cannot function without
@@ -70,14 +73,28 @@ CREATE TABLE user_auth (
   password_hash  VARCHAR(200) NOT NULL
 );
 
+-- Server-side session records make logout an actual invalidation, rather than
+-- merely asking the browser to forget a still-valid JWT.
+CREATE TABLE auth_session (
+  session_id      VARCHAR(36) PRIMARY KEY,
+  user_id         INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  expires_at      TIMESTAMP(6) NOT NULL,
+  revoked_at      TIMESTAMP(6),
+  created_at      TIMESTAMP(6) NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_auth_session_active ON auth_session (user_id, expires_at)
+  WHERE revoked_at IS NULL;
+
 CREATE TABLE booking (
   pnr_number         VARCHAR(20) PRIMARY KEY,
   user_id            INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
   starts_at_station  VARCHAR(10) NOT NULL REFERENCES station(station_code),
   ends_at_station    VARCHAR(10) NOT NULL REFERENCES station(station_code),
   booking_date       TIMESTAMP(6) NOT NULL DEFAULT now(),
-  booking_status     VARCHAR(20) NOT NULL DEFAULT 'pending',
-  fare               NUMERIC(10,2) NOT NULL
+  booking_status     VARCHAR(20) NOT NULL DEFAULT 'pending'
+                     CHECK (booking_status IN ('pending', 'confirmed', 'expired', 'cancelled')),
+  fare               NUMERIC(10,2) NOT NULL CHECK (fare >= 0),
+  CHECK (starts_at_station <> ends_at_station)
 );
 
 CREATE TABLE ticket (
@@ -86,15 +103,16 @@ CREATE TABLE ticket (
   trip_id         INT NOT NULL REFERENCES trip(trip_id) ON DELETE CASCADE,
   seat_id         INT NOT NULL REFERENCES seat(seat_id) ON DELETE CASCADE,
   passenger_name  VARCHAR(100) NOT NULL,
-  passenger_age   INT NOT NULL CHECK (passenger_age > 0),
-  price           NUMERIC(10,2) NOT NULL
+  passenger_age   INT NOT NULL CHECK (passenger_age BETWEEN 1 AND 120),
+  price           NUMERIC(10,2) NOT NULL CHECK (price >= 0)
 );
 
 CREATE TABLE payment (
   payment_id      SERIAL PRIMARY KEY,
   pnr_number      VARCHAR(20) NOT NULL REFERENCES booking(pnr_number) ON DELETE CASCADE,
-  amount          NUMERIC(10,2) NOT NULL,
-  payment_method  VARCHAR(50) NOT NULL
+  amount          NUMERIC(10,2) NOT NULL CHECK (amount >= 0),
+  payment_method  VARCHAR(50) NOT NULL CHECK (payment_method IN ('bKash', 'Nagad', 'Card')),
+  UNIQUE (pnr_number)
 );
 
 -- Indexes that the booking/search queries lean on.

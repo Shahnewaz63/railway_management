@@ -1,5 +1,4 @@
 const express = require("express");
-const cors = require("cors");
 const path = require("path");
 require("dotenv").config();
 
@@ -9,11 +8,14 @@ const searchRoutes = require("./routes/search");
 const tripRoutes = require("./routes/trips");
 const bookingRoutes = require("./routes/bookings");
 const classRoutes = require("./routes/classes");
+const adminRoutes = require("./routes/admin");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+// The frontend is served by this same Express application. Avoiding a wide
+// open CORS policy prevents other origins from invoking cookie-authenticated
+// endpoints in a browser.
+app.use(express.json({ limit: "100kb" }));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/stations", stationRoutes);
@@ -21,6 +23,7 @@ app.use("/api/search", searchRoutes);
 app.use("/api/trips", tripRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/classes", classRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.use((req, res, next) => {
   if (req.path.startsWith("/api/")) return res.status(404).json({ error: "Not found." });

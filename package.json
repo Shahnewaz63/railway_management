@@ -7,7 +7,10 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "migrate": "psql \"$DATABASE_URL\" -f database/schema.sql",
+    "migrate": "node database/run-sql.js database/schema.sql",
+    "migrate:roles": "node database/run-sql.js database/migrations/001_add_user_roles.sql",
+    "migrate:auth-sessions": "node database/run-sql.js database/migrations/002_add_auth_sessions.sql",
+    "migrate:constraints": "node database/run-sql.js database/migrations/003_add_domain_constraints.sql",
     "seed": "node database/seed.js"
   },
   "dependencies": {
