@@ -56,16 +56,16 @@ function useTheme() {
   const dark = theme === "dark";
   const t = {
     dark,
-    pageBg: dark ? "bg-slate-950" : "bg-slate-50",
+    pageBg: dark ? "bg-slate-950" : "bg-[#f6f8fc]",
     text: dark ? "text-slate-100" : "text-slate-900",
     subtext: dark ? "text-slate-400" : "text-slate-500",
-    navBg: dark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200",
+    navBg: dark ? "bg-slate-950/95 border-slate-800" : "bg-white/95 border-slate-200",
     cardBg: dark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200",
-    cardAltBg: dark ? "bg-slate-800/60 border-slate-700" : "bg-slate-100 border-slate-200",
-    inputBg: dark ? "bg-slate-800 border-slate-700 text-slate-100" : "bg-white border-slate-300 text-slate-900",
-    hero: dark ? "bg-blue-950" : "bg-blue-900",
-    primary: "bg-blue-800 hover:bg-blue-700 text-white",
-    primaryOutline: dark ? "border border-slate-700 hover:bg-slate-800 text-slate-100" : "border border-slate-300 hover:bg-slate-100 text-slate-900",
+    cardAltBg: dark ? "bg-slate-800/60 border-slate-700" : "bg-slate-50 border-slate-200",
+    inputBg: dark ? "bg-slate-800 border-slate-700 text-slate-100" : "bg-white border-slate-200 text-slate-900",
+    hero: dark ? "bg-[#061633]" : "bg-[#071b3a]",
+    primary: "bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-white shadow-lg shadow-teal-500/20",
+    primaryOutline: dark ? "border border-slate-700 hover:bg-slate-800 text-slate-100" : "border border-slate-200 hover:border-teal-300 hover:bg-teal-50 text-slate-900",
     divider: dark ? "border-slate-800" : "border-slate-200",
   };
   return { theme, setTheme, t };
@@ -85,14 +85,14 @@ function Badge({ children, tone = "default", t }) {
 function PrimaryButton({ children, onClick, disabled, className = "", t, type = "button" }) {
   return (
     <button type={type} onClick={onClick} disabled={disabled}
-      className={`px-5 py-2.5 rounded-md font-medium text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${t.primary} ${className}`}>
+      className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed ${t.primary} ${className}`}>
       {children}
     </button>
   );
 }
 function OutlineButton({ children, onClick, className = "", t, type = "button" }) {
   return (
-    <button type={type} onClick={onClick} className={`px-5 py-2.5 rounded-md font-medium text-sm transition-colors ${t.primaryOutline} ${className}`}>
+    <button type={type} onClick={onClick} className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all ${t.primaryOutline} ${className}`}>
       {children}
     </button>
   );
@@ -124,14 +124,60 @@ function BackBar({ t, onBack, label, disabled = false }) {
     </button>
   );
 }
-function StationSelect({ value, onChange, t, stations, excludeCode }) {
+function StationSelect({ value, onChange, t, stations, excludeCode, label }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = React.useRef(null);
+  const selected = stations.find((s) => s.station_code === value);
+  const options = stations
+    .filter((s) => s.station_code !== excludeCode)
+    .filter((s) => `${s.station_name} ${s.city} ${s.station_code}`.toLowerCase().includes(query.toLowerCase()));
+
+  useEffect(() => {
+    const close = (event) => { if (ref.current && !ref.current.contains(event.target)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+
+  const choose = (station) => {
+    onChange(station.station_code);
+    setQuery("");
+    setOpen(false);
+  };
+
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className={`w-full px-3 py-2.5 rounded-md border text-sm ${t.inputBg}`}>
-      <option value="">Select station</option>
-      {stations.filter((s) => s.station_code !== excludeCode).map((s) => (
-        <option key={s.station_code} value={s.station_code}>{s.station_name} — {s.city}</option>
-      ))}
-    </select>
+    <div className="relative" ref={ref}>
+      <button type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)}
+        className={`w-full px-3.5 py-3 rounded-xl border text-left flex items-center gap-3 ${t.inputBg} hover:border-teal-400`}>
+        <span className="text-lg">{label === "From" ? "↗" : "↘"}</span>
+        <span className="flex-1 min-w-0">
+          <span className={`block text-[11px] uppercase tracking-[.16em] ${t.subtext}`}>{label || "Station"}</span>
+          <span className={`block truncate text-sm font-semibold ${selected ? t.text : t.subtext}`}>{selected ? `${selected.station_name} · ${selected.city}` : "Choose a station"}</span>
+        </span>
+        <span className={`text-xs ${t.subtext}`}>⌄</span>
+      </button>
+      {open && (
+        <div role="listbox" className={`station-menu absolute left-0 right-0 z-40 mt-2 rounded-2xl border shadow-2xl overflow-hidden ${t.cardBg}`}>
+          <div className={`p-2 border-b ${t.divider}`}>
+            <div className={`flex items-center gap-2 px-3 rounded-xl border ${t.cardAltBg}`}>
+              <span className={t.subtext}>⌕</span>
+              <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search station or city…"
+                className={`w-full bg-transparent py-2.5 text-sm outline-none ${t.text}`} />
+            </div>
+          </div>
+          <div className="station-scroll max-h-64 overflow-y-auto p-1">
+            {options.length === 0 && <p className={`px-3 py-4 text-sm ${t.subtext}`}>No matching stations found.</p>}
+            {options.map((s) => (
+              <button key={s.station_code} type="button" role="option" aria-selected={value === s.station_code} onClick={() => choose(s)}
+                className={`w-full px-3 py-2.5 rounded-xl text-left flex items-center justify-between hover:bg-teal-500/10 ${value === s.station_code ? "bg-teal-500/10" : ""}`}>
+                <span><span className={`block text-sm font-semibold ${t.text}`}>{s.station_name}</span><span className={`block text-xs ${t.subtext}`}>{s.city}</span></span>
+                <span className="text-[10px] font-bold tracking-wider text-teal-600">{s.station_code}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 function JourneySummary({ t, trainName, fromCity, toCity, date, klass, coachNumber, fare }) {
@@ -233,9 +279,9 @@ function SearchCard({ t, search, setSearch, onSubmit, error, stations, classType
   return (
     <div className={`rounded-xl border shadow-sm p-5 md:p-6 ${t.cardBg}`}>
       <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-3 items-end">
-        <Field label="From" t={t}><StationSelect value={search.from} onChange={(v) => setSearch((s) => ({ ...s, from: v }))} t={t} stations={stations} excludeCode={search.to} /></Field>
-        <button onClick={swap} className={`hidden md:flex items-center justify-center w-10 h-10 rounded-full mb-0.5 self-end ${t.primaryOutline}`}>&#8646;</button>
-        <Field label="To" t={t}><StationSelect value={search.to} onChange={(v) => setSearch((s) => ({ ...s, to: v }))} t={t} stations={stations} excludeCode={search.from} /></Field>
+        <Field label="From" t={t}><StationSelect label="From" value={search.from} onChange={(v) => setSearch((s) => ({ ...s, from: v }))} t={t} stations={stations} excludeCode={search.to} /></Field>
+        <button onClick={swap} aria-label="Swap stations" className={`hidden md:flex items-center justify-center w-11 h-11 rounded-full mb-0.5 self-end text-lg ${t.primaryOutline}`}>&#8646;</button>
+        <Field label="To" t={t}><StationSelect label="To" value={search.to} onChange={(v) => setSearch((s) => ({ ...s, to: v }))} t={t} stations={stations} excludeCode={search.from} /></Field>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
         <Field label="Journey date" t={t}>
@@ -259,17 +305,43 @@ function SearchCard({ t, search, setSearch, onSubmit, error, stations, classType
 /* ============================== Pages ============================== */
 
 function HomePage({ t, search, setSearch, doSearch, searchError, stations, classTypes }) {
+  const steps = [
+    ["01", "Pick your route", "Search by station, city, travel date and preferred class."],
+    ["02", "Choose your seat", "Compare available coaches and tap the seats you want."],
+    ["03", "Add passenger details", "Enter the name and age for every traveller."],
+    ["04", "Pay & travel", "Complete the demo payment and keep your digital ticket handy."],
+  ];
   return (
     <div>
-      <div className={`${t.hero} text-white`}>
-        <div className="max-w-6xl mx-auto px-4 pt-16 pb-28 md:pt-24 md:pb-36 text-center">
-          <h1 className="text-3xl md:text-5xl font-bold tracking-tight">Travel across Bangladesh by train</h1>
-          <p className="mt-4 text-blue-100 text-base md:text-lg max-w-xl mx-auto">Search trains, check seat availability and book your journey easily.</p>
+      <section className={`${t.hero} hero-grid relative overflow-hidden text-white`}>
+        <div className="absolute -right-24 -top-32 h-96 w-96 rounded-full bg-teal-400/20 blur-3xl" />
+        <div className="absolute -left-28 bottom-0 h-80 w-80 rounded-full bg-cyan-500/15 blur-3xl" />
+        <div className="max-w-6xl mx-auto px-4 pt-14 pb-28 md:pt-20 md:pb-36 relative">
+          <div className="max-w-3xl float-in">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold tracking-wide text-teal-100"><span className="h-2 w-2 rounded-full bg-teal-300" /> YOUR NEXT JOURNEY STARTS HERE</div>
+            <h1 className="mt-6 text-4xl md:text-6xl font-black leading-[1.05] tracking-tight">Go further.<br /><span className="text-teal-300">Feel closer.</span></h1>
+            <p className="mt-5 max-w-xl text-base md:text-lg leading-relaxed text-slate-300">A smarter, smoother way to discover Bangladesh by rail. Find a train, choose your seat, and book the journey in a few easy steps.</p>
+            <div className="mt-7 flex flex-wrap gap-5 text-sm text-slate-300"><span>✦ Live seat availability</span><span>✦ Secure booking holds</span><span>✦ Digital tickets</span></div>
+          </div>
         </div>
-      </div>
-      <div className="max-w-4xl mx-auto px-4 -mt-16 md:-mt-20 pb-16">
+      </section>
+      <div className="max-w-5xl mx-auto px-4 -mt-20 md:-mt-24 relative z-10">
         <SearchCard t={t} search={search} setSearch={setSearch} onSubmit={doSearch} error={searchError} stations={stations} classTypes={classTypes} />
       </div>
+      <section className="max-w-6xl mx-auto px-4 pt-20 pb-14">
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
+          <div><p className="text-sm font-bold uppercase tracking-[.2em] text-teal-600">How it works</p><h2 className={`mt-2 text-3xl font-black ${t.text}`}>Your trip, made simple</h2></div>
+          <p className={`max-w-sm text-sm leading-relaxed ${t.subtext}`}>From your first search to the final ticket, everything you need is in one clear flow.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {steps.map(([number, title, copy], index) => (
+            <div key={number} className={`relative rounded-2xl border p-5 ${t.cardBg} ${index === 0 ? "ring-2 ring-teal-400/20" : ""}`}>
+              <div className="flex items-center justify-between"><span className="text-3xl font-black text-teal-500/30">{number}</span><span className={`h-9 w-9 rounded-xl flex items-center justify-center ${t.cardAltBg} text-teal-600`}>{["⌕", "▦", "♙", "✓"][index]}</span></div>
+              <h3 className={`mt-5 font-bold ${t.text}`}>{title}</h3><p className={`mt-2 text-sm leading-relaxed ${t.subtext}`}>{copy}</p>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
