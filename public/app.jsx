@@ -233,10 +233,10 @@ function JourneySummary({ t, trainName, fromCity, toCity, date, klass, coachNumb
   return (
     <div className={`rounded-lg border p-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm ${t.cardAltBg}`}>
       <div><p className={t.subtext}>Train</p><p className={`font-medium ${t.text}`}>{trainName}</p></div>
-      <div><p className={t.subtext}>Route</p><p className={`font-medium ${t.text}`}>{fromCity} â†’ {toCity}</p></div>
+      <div><p className={t.subtext}>Route</p><p className={`font-medium ${t.text}`}>{fromCity} → {toCity}</p></div>
       <div><p className={t.subtext}>Date</p><p className={`font-medium ${t.text}`}>{fmtDate(date)}</p></div>
       <div><p className={t.subtext}>Class</p><p className={`font-medium ${t.text}`}>{klass}{coachNumber != null ? ` · Coach ${coachNumber}` : ""}</p></div>
-      {fare != null && <div><p className={t.subtext}>Fare / seat</p><p className={`font-medium ${t.text}`}>à§³{fare}</p></div>}
+      {fare != null && <div><p className={t.subtext}>Fare / seat</p><p className={`font-medium ${t.text}`}>৳{fare}</p></div>}
     </div>
   );
 }
@@ -426,7 +426,7 @@ function PopularRoutes({ t, stations, onPick }) {
           <button key={`${from}-${to}`} onClick={() => onPick(from, to)}
             className={`text-left rounded-xl border p-5 transition-colors ${t.cardBg} hover:border-brand`}>
             <p className={`text-xs ${t.subtext}`}>Route</p>
-            <p className={`mt-1.5 font-semibold ${t.text}`}>{cityOf(from)} <span className="text-brand">â†’</span> {cityOf(to)}</p>
+            <p className={`mt-1.5 font-semibold ${t.text}`}>{cityOf(from)} <span className="text-brand">→</span> {cityOf(to)}</p>
             <p className="mt-3 text-xs font-medium text-brand">Search this route &rarr;</p>
           </button>
         ))}
@@ -437,13 +437,13 @@ function PopularRoutes({ t, stations, onPick }) {
 
 function FeaturedServices({ t, onAnchor, go }) {
   const services = [
-    ["â—‰", "Scheduled train status", "See published departure and arrival times.", "scheduled-trains", "section"],
-    ["âœ¦", "Travel help", "Find answers about booking, payment and seats.", "about", "page"],
-    ["â—·", "Train schedules", "Compare departure, arrival and journey duration.", "search-card", "section"],
-    ["à§³", "Fare information", "Review available classes and ticket fares.", "classinfo", "page"],
-    ["âŒ‚", "Station guide", "Browse stations in the booking network.", "station-guide", "section"],
+    ["◉", "Scheduled train status", "See published departure and arrival times.", "scheduled-trains", "section"],
+    ["✦", "Travel help", "Find answers about booking, payment and seats.", "about", "page"],
+    ["◆", "Train schedules", "Compare departure, arrival and journey duration.", "search-card", "section"],
+    ["৳", "Fare information", "Review available classes and ticket fares.", "classinfo", "page"],
+    ["⌖", "Station guide", "Browse stations in the booking network.", "station-guide", "section"],
   ];
-  return <section className="max-w-6xl mx-auto px-4 py-14"><div className="mb-7 max-w-xl"><p className="text-xs font-bold uppercase tracking-[.2em] text-brand">Designed around your trip</p><h2 className={`mt-2 text-3xl font-bold tracking-tight ${t.text}`}>Everything you need for your journey</h2></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{services.map(([icon, title, copy, target, type], i) => <button key={title} onClick={() => type === "page" ? go(target) : onAnchor(target)} className={`service-card reveal rounded-2xl border p-5 text-left ${t.cardBg}`} style={{ animationDelay: `${i * 55}ms` }}><span className="service-icon flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-xl font-bold text-brand">{icon}</span><h3 className={`mt-5 font-bold ${t.text}`}>{title}</h3><p className={`mt-2 text-sm leading-relaxed ${t.subtext}`}>{copy}</p><span className="mt-4 inline-flex text-sm font-semibold text-brand">Explore â†’</span></button>)}</div></section>;
+  return <section className="max-w-6xl mx-auto px-4 py-14"><div className="mb-7 max-w-xl"><p className="text-xs font-bold uppercase tracking-[.2em] text-brand">Designed around your trip</p><h2 className={`mt-2 text-3xl font-bold tracking-tight ${t.text}`}>Everything you need for your journey</h2></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{services.map(([icon, title, copy, target, type], i) => <button key={title} onClick={() => type === "page" ? go(target) : onAnchor(target)} className={`service-card reveal rounded-2xl border p-5 text-left ${t.cardBg}`} style={{ animationDelay: `${i * 55}ms` }}><span className="service-icon flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-xl font-bold text-brand">{icon}</span><h3 className={`mt-5 font-bold ${t.text}`}>{title}</h3><p className={`mt-2 text-sm leading-relaxed ${t.subtext}`}>{copy}</p><span className="mt-4 inline-flex text-sm font-semibold text-brand">Explore →</span></button>)}</div></section>;
 }
 
 function UpcomingTrains({ t, search, stations, onSearch }) {
@@ -458,7 +458,7 @@ function UpcomingTrains({ t, search, stations, onSearch }) {
   const from = stations.find((s) => s.station_code === search.from);
   const to = stations.find((s) => s.station_code === search.to);
   const time = (value) => new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  return <section id="scheduled-trains" className="max-w-6xl mx-auto px-4 py-14 scroll-mt-24"><div className="mb-6 flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[.2em] text-brand">Published timetable</p><h2 className={`mt-2 text-3xl font-bold tracking-tight ${t.text}`}>Scheduled trains</h2><p className={`mt-1 text-sm ${t.subtext}`}>{from?.city} to {to?.city} · {fmtDate(search.date)}</p></div><button onClick={onSearch} className="text-sm font-semibold text-brand">View all trains â†’</button></div>{error && <ErrorBanner message={error} />}{trips === null && <p className={t.subtext}>Loading timetable…</p>}{trips?.length === 0 && <p className={`rounded-2xl border p-6 text-sm ${t.cardBg} ${t.subtext}`}>No scheduled trains were found for this route and date.</p>}{trips?.length > 0 && <div className="grid gap-4 md:grid-cols-3">{trips.map((trip) => <article key={trip.trip_id} className={`service-card rounded-2xl border p-5 ${t.cardBg}`}><div className="flex justify-between"><div><h3 className={`font-bold ${t.text}`}>{trip.train_name}</h3><p className={`mt-1 text-xs ${t.subtext}`}>Train {trip.train_id}</p></div><span className="route-pulse rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Scheduled</span></div><div className="mt-5 flex items-center gap-3"><div><p className={`text-lg font-bold ${t.text}`}>{time(trip.origin_departure)}</p><p className={`text-xs ${t.subtext}`}>{from?.city}</p></div><div className="flex-1 border-t border-emerald-200"/><div className="text-right"><p className={`text-lg font-bold ${t.text}`}>{time(trip.destination_arrival)}</p><p className={`text-xs ${t.subtext}`}>{to?.city}</p></div></div><button onClick={onSearch} className="mt-5 text-sm font-semibold text-brand">View journey â†’</button></article>)}</div>}<p className={`mt-3 text-xs ${t.subtext}`}>Published timetable only; live location and delay data are not available.</p></section>;
+  return <section id="scheduled-trains" className="max-w-6xl mx-auto px-4 py-14 scroll-mt-24"><div className="mb-6 flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[.2em] text-brand">Published timetable</p><h2 className={`mt-2 text-3xl font-bold tracking-tight ${t.text}`}>Scheduled trains</h2><p className={`mt-1 text-sm ${t.subtext}`}>{from?.city} to {to?.city} · {fmtDate(search.date)}</p></div><button onClick={onSearch} className="text-sm font-semibold text-brand">View all trains →</button></div>{error && <ErrorBanner message={error} />}{trips === null && <p className={t.subtext}>Loading timetable…</p>}{trips?.length === 0 && <p className={`rounded-2xl border p-6 text-sm ${t.cardBg} ${t.subtext}`}>No scheduled trains were found for this route and date.</p>}{trips?.length > 0 && <div className="grid gap-4 md:grid-cols-3">{trips.map((trip) => <article key={trip.trip_id} className={`service-card rounded-2xl border p-5 ${t.cardBg}`}><div className="flex justify-between"><div><h3 className={`font-bold ${t.text}`}>{trip.train_name}</h3><p className={`mt-1 text-xs ${t.subtext}`}>Train {trip.train_id}</p></div><span className="route-pulse rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Scheduled</span></div><div className="mt-5 flex items-center gap-3"><div><p className={`text-lg font-bold ${t.text}`}>{time(trip.origin_departure)}</p><p className={`text-xs ${t.subtext}`}>{from?.city}</p></div><div className="flex-1 border-t border-emerald-200"/><div className="text-right"><p className={`text-lg font-bold ${t.text}`}>{time(trip.destination_arrival)}</p><p className={`text-xs ${t.subtext}`}>{to?.city}</p></div></div><button onClick={onSearch} className="mt-5 text-sm font-semibold text-brand">View journey →</button></article>)}</div>}<p className={`mt-3 text-xs ${t.subtext}`}>Published timetable only; live location and delay data are not available.</p></section>;
 }
 
 function StationGuide({ t, stations, onPick }) {
@@ -486,7 +486,7 @@ function HomePage({ t, search, setSearch, doSearch, searchError, stations, class
           <div id="search-card" className="mt-9 max-w-5xl scroll-mt-24 reveal" style={{ animationDelay: "140ms" }}>
             <SearchCard t={t} search={search} setSearch={setSearch} onSubmit={doSearch} error={searchError} stations={stations} classTypes={classTypes} glass />
           </div>
-          <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-medium text-white/80"><span>âœ“ Schedule based results</span><span>âœ“ Live seat availability</span><span>âœ“ Secure booking holds</span></div>
+          <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-medium text-white/80"><span>✓ Schedule based results</span><span>✓ Live seat availability</span><span>✓ Secure booking holds</span></div>
         </div>
       </section>
       <FeaturedServices t={t} onAnchor={onAnchor} go={go} />
@@ -547,7 +547,7 @@ function LoginPage({ t, pendingSearch, onLogin, stations }) {
         <div className={`mt-4 rounded-lg border p-3 text-sm ${t.cardAltBg} ${t.text}`}>
           Please log in to continue with train search and booking.
           <div className={`mt-1 ${t.subtext}`}>
-            {stationCity(pendingSearch.from)} â†’ {stationCity(pendingSearch.to)}, {fmtDate(pendingSearch.date)}
+            {stationCity(pendingSearch.from)} → {stationCity(pendingSearch.to)}, {fmtDate(pendingSearch.date)}
             {pendingSearch.klass ? `, ${pendingSearch.klass}` : ""}
           </div>
         </div>
@@ -637,7 +637,7 @@ function ResultsPage({ t, search, go, stations, currentUser }) {
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <h1 className={`text-xl font-bold tracking-tight ${t.text}`}>{from?.city} â†’ {to?.city}</h1>
+          <h1 className={`text-xl font-bold tracking-tight ${t.text}`}>{from?.city} → {to?.city}</h1>
           <p className={`text-sm ${t.subtext}`}>{fmtDate(search.date)}{search.klass ? ` · ${search.klass}` : ""}</p>
         </div>
         <OutlineButton t={t} onClick={() => go("home")}>&larr; Modify Search</OutlineButton>
@@ -679,7 +679,7 @@ function ResultsPage({ t, search, go, stations, currentUser }) {
                     <p className={`text-sm font-bold ${c.available > 0 ? "text-brand" : "text-red-500"}`}>{c.available}</p>
                   </div>
                   <div className={`flex flex-wrap items-center justify-between gap-2 border-t pt-2 ${t.divider}`}>
-                    <span className={`text-sm font-semibold ${t.text}`}>à§³{c.fare}</span>
+                    <span className={`text-sm font-semibold ${t.text}`}>৳{c.fare}</span>
                     <PrimaryButton t={t} disabled={c.available === 0} onClick={() => go("coach", { tripId: trip.trip_id, klass: c.coach_type, fare: c.fare })}>Book Now</PrimaryButton>
                   </div>
                 </div>
@@ -931,7 +931,7 @@ function PaymentPage({ t, go, ctx, stations }) {
           ))}
         </div>
         <div className={`flex justify-between mt-3 pt-3 border-t font-semibold ${t.divider} ${t.text}`}>
-          <span>Total</span><span>à§³{booking.fare}</span>
+          <span>Total</span><span>৳{booking.fare}</span>
         </div>
       </div>
 
@@ -947,7 +947,7 @@ function PaymentPage({ t, go, ctx, stations }) {
           Simulate a failed payment (for testing)
         </label>
         <ErrorBanner message={error} />
-        <PrimaryButton t={t} onClick={pay} disabled={loading || cancelling} className="w-full mt-4">{loading ? "Processing…" : `Pay à§³${booking.fare}`}</PrimaryButton>
+        <PrimaryButton t={t} onClick={pay} disabled={loading || cancelling} className="w-full mt-4">{loading ? "Processing…" : `Pay ৳${booking.fare}`}</PrimaryButton>
       </div>
     </div>
   );
@@ -990,14 +990,14 @@ function TicketPage({ t, go, ctx, stations }) {
         </div>
         <div className={`grid grid-cols-2 gap-y-3 gap-x-4 text-sm border-t pt-4 ${t.divider}`}>
           <InfoRow t={t} label="Train" value={first.train_name} />
-          <InfoRow t={t} label="Route" value={`${fromCity} â†’ ${toCity}`} />
+          <InfoRow t={t} label="Route" value={`${fromCity} → ${toCity}`} />
           <InfoRow t={t} label="Journey Date" value={fmtDate(first.departure_date)} />
           <InfoRow t={t} label="Starts" value={first.starts_at ? new Date(first.starts_at).toLocaleString() : "—"} />
           <InfoRow t={t} label="Ends" value={first.ends_at ? new Date(first.ends_at).toLocaleString() : "—"} />
           <InfoRow t={t} label="Class" value={first.coach_type} />
           <InfoRow t={t} label="Coach" value={first.coach_number} />
           <InfoRow t={t} label="Seats" value={tickets.map((tk) => tk.seat_number).join(", ")} />
-          <InfoRow t={t} label="Fare" value={`à§³${booking.fare}`} />
+          <InfoRow t={t} label="Fare" value={`৳${booking.fare}`} />
           <InfoRow t={t} label="Payment" value={payment?.payment_method || "-"} />
         </div>
         <div className={`mt-4 pt-4 border-t ${t.divider}`}>
@@ -1006,7 +1006,7 @@ function TicketPage({ t, go, ctx, stations }) {
             <div key={tk.ticket_id} className="flex flex-wrap items-center justify-between gap-2 border-b py-2 last:border-0">
               <span className={`${t.text} ${tk.ticket_status === "cancelled" ? "line-through opacity-60" : ""}`}>{tk.passenger_name} ({tk.passenger_age}y) · Seat {tk.seat_number} · {tk.ticket_status}</span>
               {tk.ticket_status === "active" && booking.booking_status === "confirmed" && <button disabled={canceling === tk.ticket_id} onClick={() => cancelTicket(tk)} className="text-sm font-semibold text-red-600 disabled:opacity-50">{canceling === tk.ticket_id ? "Cancelling…" : "Cancel ticket"}</button>}
-              {tk.refund_amount && <span className="text-xs font-medium text-emerald-600">Refund à§³{tk.refund_amount} {tk.refund_status}</span>}
+              {tk.refund_amount && <span className="text-xs font-medium text-emerald-600">Refund ৳{tk.refund_amount} {tk.refund_status}</span>}
             </div>
           ))}
           {cancelError && <ErrorBanner message={cancelError} />}
@@ -1052,7 +1052,7 @@ function MyBookingsPage({ t, go, stations }) {
       <button onClick={() => openBooking(b)} className={`w-full text-left rounded-xl border p-4 flex items-center justify-between transition-colors ${t.cardBg} hover:border-brand`}>
         <div>
           <p className={`font-medium ${t.text}`}>{stationLabel(b.starts_at_station)} <span aria-hidden="true">&#8594;</span> {stationLabel(b.ends_at_station)}</p>
-          <p className={`text-xs ${t.subtext}`}>PNR {b.pnr_number} · à§³{b.fare} · {fmtDate(b.booking_date)}</p>
+          <p className={`text-xs ${t.subtext}`}>PNR {b.pnr_number} · ৳{b.fare} · {fmtDate(b.booking_date)}</p>
           <p className={`mt-1 text-xs ${t.subtext}`}>{b.train_name || "Train"} · Starts {b.starts_at ? new Date(b.starts_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—"} · Ends {b.ends_at ? new Date(b.ends_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—"}</p>
         </div>
         <Badge t={t} tone={tone}>{b.effective_status[0].toUpperCase() + b.effective_status.slice(1)}</Badge>
@@ -1253,7 +1253,7 @@ function AdminPage({ t, currentUser }) {
           <Field label="To" t={t}><select required value={customBooking.to} onChange={(e) => setCustomBooking((v) => ({ ...v, to: e.target.value }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`}><option value="">Choose station</option>{bookingOptions.stations.map((s) => <option key={s.station_code} value={s.station_code}>{s.city} ({s.station_code})</option>)}</select></Field>
           <Field label="Passenger name" t={t}><input required maxLength="100" value={customBooking.passenger_name} onChange={(e) => setCustomBooking((v) => ({ ...v, passenger_name: e.target.value }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`} /></Field>
           <Field label="Passenger age" t={t}><input required type="number" min="1" max="120" value={customBooking.passenger_age} onChange={(e) => setCustomBooking((v) => ({ ...v, passenger_age: e.target.value }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`} /></Field>
-          <Field label="Fare (à§³)" t={t}><input required type="number" min="0" step="0.01" value={customBooking.fare} onChange={(e) => setCustomBooking((v) => ({ ...v, fare: e.target.value }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`} /></Field>
+          <Field label="Fare (৳)" t={t}><input required type="number" min="0" step="0.01" value={customBooking.fare} onChange={(e) => setCustomBooking((v) => ({ ...v, fare: e.target.value }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`} /></Field>
           <Field label="Booking status" t={t}><select value={customBooking.status} onChange={(e) => setCustomBooking((v) => ({ ...v, status: e.target.value }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`}><option value="confirmed">Confirmed</option><option value="pending">Pending payment</option></select></Field>
           {customBooking.status === "confirmed" && <Field label="Payment method" t={t}><select value={customBooking.payment_method} onChange={(e) => setCustomBooking((v) => ({ ...v, payment_method: e.target.value }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`}><option>Card</option><option>bKash</option><option>Nagad</option></select></Field>}
           <div className="flex items-end"><PrimaryButton t={t} type="submit" disabled={saving === "custom-booking"}>{saving === "custom-booking" ? "Creating…" : "Create booking"}</PrimaryButton></div>
@@ -1324,11 +1324,11 @@ function AdminPage({ t, currentUser }) {
                         ) : (
                           tk.ticket_id ? <>
                             <p className={`font-medium ${t.text}`}>{tk.passenger_name}, {tk.passenger_age}y</p>
-                            <p className={t.subtext}>Booking fare à§³{tk.fare}</p>
+                            <p className={t.subtext}>Booking fare ৳{tk.fare}</p>
                           </> : <span className={t.subtext}>No passenger ticket</span>
                         )}
                       </td>
-                      <td className={`p-3 ${t.subtext}`}>{tk.starts_at_station} â†’ {tk.ends_at_station}<br />{tk.train_name || "—"}{tk.departure_date ? ` · ${fmtDate(tk.departure_date)}` : ""}</td>
+                      <td className={`p-3 ${t.subtext}`}>{tk.starts_at_station} → {tk.ends_at_station}<br />{tk.train_name || "—"}{tk.departure_date ? ` · ${fmtDate(tk.departure_date)}` : ""}</td>
                       <td className={`p-3 ${t.subtext}`}>{tk.seat_number ? <>Coach {tk.coach_number} · {tk.seat_number}<br />{tk.coach_type}</> : "—"}</td>
                       <td className="p-3"><Badge t={t} tone={tk.booking_status === "confirmed" ? "success" : tk.booking_status === "pending" ? "warn" : "danger"}>{tk.booking_status}</Badge></td>
                       <td className="p-3">
@@ -1380,7 +1380,7 @@ function ClassInfoPage({ t }) {
           <div key={c.coach_type} className={`rounded-xl border p-5 ${t.cardBg}`}>
             <div className="flex items-center justify-between mb-3">
               <h2 className={`font-semibold ${t.text}`}>{c.coach_type}</h2>
-              <span className="text-sm font-semibold text-brand">à§³{c.fare ?? "—"}</span>
+              <span className="text-sm font-semibold text-brand">৳{c.fare ?? "—"}</span>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <InfoRow t={t} label="Seat Type" value={c.seatType} />
@@ -1427,7 +1427,7 @@ function VerifyTicketPage({ t }) {
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   };
-  return <div className="mx-auto max-w-xl px-4 py-12"><p className="text-xs font-bold uppercase tracking-[.2em] text-brand">Travel with confidence</p><h1 className={`mt-2 text-3xl font-bold ${t.text}`}>Verify your ticket</h1><p className={`mt-2 text-sm ${t.subtext}`}>Enter the booking reference and the email used at checkout.</p><form onSubmit={submit} className={`mt-6 space-y-4 rounded-2xl border p-5 ${t.cardBg}`}><Field t={t} label="PNR"><input required autoCapitalize="characters" maxLength="10" value={form.pnr} onChange={(e) => setForm((v) => ({ ...v, pnr: e.target.value.toUpperCase() }))} className={`w-full rounded-lg border px-3 py-3 ${t.inputBg}`} placeholder="PNR1234567" /></Field><Field t={t} label="Booking email"><input required type="email" value={form.email} onChange={(e) => setForm((v) => ({ ...v, email: e.target.value }))} className={`w-full rounded-lg border px-3 py-3 ${t.inputBg}`} /></Field><ErrorBanner message={error} /><PrimaryButton t={t} type="submit" disabled={loading}>{loading ? "Checking…" : "Verify ticket"}</PrimaryButton></form>{result && <section className={`mt-5 rounded-2xl border p-5 ${t.cardBg}`}><div className="flex items-center justify-between"><h2 className={`font-bold ${t.text}`}>{result.train_name}</h2><Badge t={t} tone={result.booking_status === "confirmed" ? "success" : "danger"}>{result.booking_status}</Badge></div><p className={`mt-2 ${t.text}`}>{result.starts_at_station} â†’ {result.ends_at_station}</p><p className={`mt-1 text-sm ${t.subtext}`}>Starts {new Date(result.starts_at).toLocaleString()} · Ends {new Date(result.ends_at).toLocaleString()}</p><p className={`mt-2 text-xs ${t.subtext}`}>PNR {result.pnr_number} · {result.tickets.length} passenger(s)</p>{result.tickets.map((ticket, i) => <p key={i} className={`mt-2 text-sm ${t.text}`}>{ticket.passenger_name} · Seat {ticket.coach_number}-{ticket.seat_number} ({ticket.coach_type})</p>)}</section>}</div>;
+  return <div className="mx-auto max-w-xl px-4 py-12"><p className="text-xs font-bold uppercase tracking-[.2em] text-brand">Travel with confidence</p><h1 className={`mt-2 text-3xl font-bold ${t.text}`}>Verify your ticket</h1><p className={`mt-2 text-sm ${t.subtext}`}>Enter the booking reference and the email used at checkout.</p><form onSubmit={submit} className={`mt-6 space-y-4 rounded-2xl border p-5 ${t.cardBg}`}><Field t={t} label="PNR"><input required autoCapitalize="characters" maxLength="10" value={form.pnr} onChange={(e) => setForm((v) => ({ ...v, pnr: e.target.value.toUpperCase() }))} className={`w-full rounded-lg border px-3 py-3 ${t.inputBg}`} placeholder="PNR1234567" /></Field><Field t={t} label="Booking email"><input required type="email" value={form.email} onChange={(e) => setForm((v) => ({ ...v, email: e.target.value }))} className={`w-full rounded-lg border px-3 py-3 ${t.inputBg}`} /></Field><ErrorBanner message={error} /><PrimaryButton t={t} type="submit" disabled={loading}>{loading ? "Checking…" : "Verify ticket"}</PrimaryButton></form>{result && <section className={`mt-5 rounded-2xl border p-5 ${t.cardBg}`}><div className="flex items-center justify-between"><h2 className={`font-bold ${t.text}`}>{result.train_name}</h2><Badge t={t} tone={result.booking_status === "confirmed" ? "success" : "danger"}>{result.booking_status}</Badge></div><p className={`mt-2 ${t.text}`}>{result.starts_at_station} → {result.ends_at_station}</p><p className={`mt-1 text-sm ${t.subtext}`}>Starts {new Date(result.starts_at).toLocaleString()} · Ends {new Date(result.ends_at).toLocaleString()}</p><p className={`mt-2 text-xs ${t.subtext}`}>PNR {result.pnr_number} · {result.tickets.length} passenger(s)</p>{result.tickets.map((ticket, i) => <p key={i} className={`mt-2 text-sm ${t.text}`}>{ticket.passenger_name} · Seat {ticket.coach_number}-{ticket.seat_number} ({ticket.coach_type})</p>)}</section>}</div>;
 }
 
 function ContactPage({ t, currentUser }) {
@@ -1482,6 +1482,72 @@ function ContactPage({ t, currentUser }) {
 }
 
 /* ============================== Root App ============================== */
+
+function CustomerAssistant({ t, stations, onUseJourney }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [messages, setMessages] = useState([]);
+  const endRef = React.useRef(null);
+
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [messages, busy, open]);
+
+  const send = async (event) => {
+    event?.preventDefault();
+    const content = draft.trim();
+    if (!content || busy) return;
+    const next = [...messages, { role: "user", content }];
+    setMessages(next);
+    setDraft("");
+    setError("");
+    setBusy(true);
+    try {
+      const result = await api("/assistant/chat", { method: "POST", body: { messages: next.slice(-10) } });
+      setMessages((current) => [...current, { role: "assistant", content: result.reply, journey: result.journey || null }]);
+    } catch (e) { setError(e.message.includes("GEMINI_API_KEY") ? "AI assistant setup required. Add GEMINI_API_KEY to the server environment." : e.message); }
+    finally { setBusy(false); }
+  };
+
+  const suggestions = ["How do I book a ticket?", "ঢাকা থেকে চট্টগ্রাম যেতে চাই", "How do I check my booking?"];
+  const stationName = (code) => stations.find((item) => item.station_code === code)?.city || code;
+
+  return <>
+    {open && <section className={`assistant-panel fixed z-50 flex flex-col overflow-hidden rounded-2xl border shadow-2xl ${t.cardBg}`} aria-label="RailX customer assistant">
+      <header className="flex items-center justify-between bg-brand px-4 py-3 text-white">
+        <div><p className="font-bold">RailX assistant</p><p className="text-xs text-white/80">বাংলা ও English · Journey help</p></div>
+        <button onClick={() => setOpen(false)} aria-label="Close assistant" className="rounded-lg px-2 py-1 text-xl text-white hover:bg-white/15">×</button>
+      </header>
+      <div className="assistant-messages flex-1 space-y-3 overflow-y-auto p-4" aria-live="polite">
+        {messages.length === 0 && <div>
+          <div className="assistant-bubble assistant-answer rounded-2xl rounded-tl-sm px-3.5 py-3 text-sm">Hello! আমি আপনাকে ট্রেন খুঁজতে, বুকিং বুঝতে বা টিকিট সংক্রান্ত প্রশ্নে সাহায্য করতে পারি। কীভাবে সাহায্য করব?</div>
+          <div className="mt-3 flex flex-wrap gap-2">{suggestions.map((item) => <button key={item} onClick={() => setDraft(item)} className={`rounded-full border px-3 py-1.5 text-xs ${t.primaryOutline}`}>{item}</button>)}</div>
+        </div>}
+        {messages.map((message, index) => <div key={`${message.role}-${index}`} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+          <div className={`assistant-bubble max-w-[88%] rounded-2xl px-3.5 py-3 text-sm leading-relaxed ${message.role === "user" ? "assistant-question rounded-tr-sm" : `assistant-answer rounded-tl-sm ${t.text}`}`}>
+            <p className="whitespace-pre-wrap">{message.content}</p>
+            {message.journey && <div className={`mt-3 rounded-xl border p-3 ${t.cardAltBg}`}>
+              <p className={`font-semibold ${t.text}`}>{stationName(message.journey.from)} → {stationName(message.journey.to)}</p>
+              {message.journey.date && <p className={`mt-1 text-xs ${t.subtext}`}>Date: {message.journey.date}</p>}
+              {message.journey.coach && <p className={`mt-1 text-xs ${t.subtext}`}>Class: {message.journey.coach}</p>}
+              <button onClick={() => { onUseJourney(message.journey); setOpen(false); }} className="mt-3 w-full rounded-lg bg-brand px-3 py-2 text-xs font-bold text-white">Use this journey</button>
+            </div>}
+          </div>
+        </div>)}
+        {busy && <div className={`text-xs ${t.subtext}`} role="status">Assistant is replying…</div>}
+        {error && <div className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700" role="alert">{error}</div>}
+        <div ref={endRef} />
+      </div>
+      <form onSubmit={send} className={`flex items-end gap-2 border-t p-3 ${t.divider}`}>
+        <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send(); } }} rows={1} maxLength={1200} placeholder="Ask in বাংলা or English…" aria-label="Message the assistant" className={`max-h-24 min-h-10 flex-1 resize-y rounded-xl border px-3 py-2.5 text-sm ${t.inputBg}`} />
+        <button type="submit" disabled={busy || !draft.trim()} className="h-10 rounded-xl bg-brand px-4 text-sm font-bold text-white disabled:opacity-50">Send</button>
+      </form>
+    </section>}
+    <button onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-label={open ? "Close customer assistant" : "Open customer assistant"} className="assistant-launcher fixed z-40 flex items-center gap-2 rounded-full bg-brand px-5 py-3.5 font-bold text-white shadow-lg">
+      <span aria-hidden="true">✦</span><span>Ask RailX</span>
+    </button>
+  </>;
+}
 
 function App() {
   const { theme, setTheme, t } = useTheme();
@@ -1609,6 +1675,12 @@ function App() {
     go("home");
   };
 
+  const useAssistantJourney = (journey) => {
+    setSearch((current) => ({ ...current, from: journey.from, to: journey.to, date: journey.date || current.date, klass: journey.coach || "" }));
+    go("home");
+    window.setTimeout(() => document.getElementById("search-card")?.scrollIntoView({ behavior: "smooth", block: "center" }), 140);
+  };
+
   // Enrich ctx with station city names + derived fields whenever we move
   // into the coach/seat/passenger/payment flow, so downstream pages don't
   // each have to re-derive them.
@@ -1685,6 +1757,7 @@ function App() {
     <div className={`min-h-screen ${t.pageBg}`}>
       <NavBar page={page} go={(p) => { if (p === "home") setCtx({}); go(p); }} onAnchor={goAnchor} t={t} setTheme={setTheme} currentUser={currentUser} logout={logout} />
       {body}
+      <CustomerAssistant t={t} stations={stations} onUseJourney={useAssistantJourney} />
       <footer className={`border-t mt-10 py-6 text-center text-xs ${t.divider} ${t.subtext}`}>
         RailX BD — demonstration/prototype platform, not an official Bangladesh Railway website.
       </footer>

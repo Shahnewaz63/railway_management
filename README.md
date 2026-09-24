@@ -101,6 +101,10 @@ GMAIL_APP_PASSWORD=your-google-app-password
 
 Use a Google App Password for the Gmail account (with 2-Step Verification enabled), not the account's normal password. Restart the server after saving the values. Codes are valid for 10 minutes, limited to five attempts, and can be requested once per minute. Existing sessions are signed out after a successful reset.
 
+## Customer assistant
+
+The floating RailX assistant answers support questions in English or Bangla and can fill in a requested journey in the train search form. It uses the Gemini API from the Express server with the Gemini 3.5 Flash-Lite model; the API key is never sent to the browser. Add `GEMINI_API_KEY` to `.env` and restart the server to enable AI replies. Without a key, the assistant displays a setup message. Journey suggestions only populate the search form; customers still review results and complete bookings through the normal flow.
+
 ## 4. Run it
 
 ```bash

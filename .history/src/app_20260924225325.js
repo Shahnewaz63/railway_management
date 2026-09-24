@@ -12,7 +12,6 @@ const adminRoutes = require("./routes/admin");
 const contactRoutes = require("./routes/contact");
 const routeRoutes = require("./routes/routes");
 const reviewRoutes = require("./routes/reviews");
-const assistantRoutes = require("./routes/assistant");
 const errorHandler = require("./middleware/errorHandler");
 const { hideApiFromDirectBrowsing } = require("./middleware/apiVisibility");
 
@@ -34,7 +33,6 @@ app.use("/api/stations", stationRoutes);
 app.use("/api/routes", routeRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/reviews", reviewRoutes);
-app.use("/api/assistant", assistantRoutes);
 app.use("/api/trips", tripRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/classes", classRoutes);
