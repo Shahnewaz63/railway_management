@@ -16,6 +16,34 @@ router.get("/", async (req, res, next) => {
     const stationsRes = await pool.query("SELECT station_code FROM station WHERE station_code IN ($1,$2)", [from, to]);
     if (stationsRes.rowCount < 2) return res.status(400).json({ error: "Invalid departure or destination station." });
 
+    const windowRes = await pool.query("SELECT CURRENT_DATE::text AS today, (CURRENT_DATE + 365)::text AS last_date");
+    const { today, last_date: lastDate } = windowRes.rows[0];
+    if (date < today || date > lastDate) {
+      return res.status(400).json({ error: `Choose a travel date from ${today} through ${lastDate}.` });
+    }
+
+    // Trips are generated for every date as the timetable is requested. This
+    // avoids a rolling seed window silently making valid trains disappear.
+    // Only fully scheduled services are materialized, and the unique index
+    // makes simultaneous searches safe.
+    await pool.query(
+      `INSERT INTO trip (train_id, route_id, departure_date, status)
+       SELECT schedule.train_id, schedule.route_id, $1::date, 'scheduled'
+       FROM (
+         SELECT train_id, route_id, COUNT(*) AS scheduled_stops
+         FROM train_station_schedule
+         GROUP BY train_id, route_id
+       ) schedule
+       JOIN (
+         SELECT route_id, COUNT(*) AS route_stops
+         FROM route_station
+         GROUP BY route_id
+       ) route ON route.route_id = schedule.route_id
+       WHERE schedule.scheduled_stops = route.route_stops
+       ON CONFLICT (train_id, departure_date) DO NOTHING`,
+      [date]
+    );
+
     // A trip only serves this journey if its route contains both stations
     // with the origin's stop_order strictly before the destination's.
     const tripsRes = await pool.query(
@@ -64,7 +92,7 @@ router.get("/", async (req, res, next) => {
                   WHERE EXISTS (
                     SELECT 1 FROM ticket tk
                     JOIN booking b ON b.pnr_number = tk.pnr_number
-                    WHERE tk.seat_id = s.seat_id AND tk.trip_id = $1
+                    WHERE tk.seat_id = s.seat_id AND tk.trip_id = $1 AND tk.ticket_status = 'active'
                       AND (b.booking_status = 'confirmed'
                            OR (b.booking_status = 'pending' AND now() - b.booking_date < interval '${HOLD_MINUTES} minutes'))
                   )

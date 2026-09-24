@@ -27,12 +27,19 @@ async function loadBookingFull(pnr) {
     Date.now() - new Date(booking.booking_date).getTime() >= HOLD_MINUTES * 60 * 1000;
 
   const ticketsRes = await pool.query(
-    `SELECT tk.*, s.seat_number, c.coach_number, c.coach_type, t.departure_date, tr.train_name
+    `SELECT tk.*, s.seat_number, c.coach_number, c.coach_type, t.departure_date, tr.train_name,
+            to_char(t.departure_date::date + sf.departure_time, 'YYYY-MM-DD"T"HH24:MI:SS') AS starts_at,
+            to_char(t.departure_date::date + st.arrival_time + CASE WHEN st.arrival_time < sf.departure_time THEN interval '1 day' ELSE interval '0 day' END, 'YYYY-MM-DD"T"HH24:MI:SS') AS ends_at,
+            rf.amount AS refund_amount, rf.refund_status, rf.processed_at AS refunded_at
      FROM ticket tk
      JOIN seat s ON s.seat_id = tk.seat_id
      JOIN coach c ON c.coach_id = s.coach_id
      JOIN trip t ON t.trip_id = tk.trip_id
      JOIN train tr ON tr.train_id = t.train_id
+     LEFT JOIN ticket_refund rf ON rf.ticket_id = tk.ticket_id
+     JOIN booking b ON b.pnr_number = tk.pnr_number
+     LEFT JOIN train_station_schedule sf ON sf.train_id = t.train_id AND sf.route_id = t.route_id AND sf.station_code = b.starts_at_station
+     LEFT JOIN train_station_schedule st ON st.train_id = t.train_id AND st.route_id = t.route_id AND st.station_code = b.ends_at_station
      WHERE tk.pnr_number = $1`,
     [pnr]
   );
@@ -52,8 +59,8 @@ router.post("/", requireAuth, async (req, res, next) => {
   const coachId = parsePositiveId(coach_id);
   const from = normalizeStationCode(req.body?.from);
   const to = normalizeStationCode(req.body?.to);
-  if (!tripId || !coachId || !Array.isArray(seats) || seats.length === 0 || seats.length > 10 || !from || !to || from === to) {
-    return res.status(400).json({ error: "trip_id, coach_id, seats, from and to are required." });
+  if (!tripId || !coachId || !Array.isArray(seats) || seats.length === 0 || seats.length > 5 || !from || !to || from === to) {
+    return res.status(400).json({ error: "Choose between 1 and 5 seats, with a valid trip and journey." });
   }
   const passengers = [];
   for (const s of seats) {
@@ -105,7 +112,8 @@ router.post("/", requireAuth, async (req, res, next) => {
       `SELECT tk.seat_id FROM ticket tk
        JOIN booking b ON b.pnr_number = tk.pnr_number
        WHERE tk.trip_id = $1 AND tk.seat_id = ANY($2::int[])
-         AND (b.booking_status = 'confirmed'
+      AND tk.ticket_status = 'active'
+      AND (b.booking_status = 'confirmed'
               OR (b.booking_status = 'pending' AND now() - b.booking_date < interval '${HOLD_MINUTES} minutes'))`,
       [tripId, seatIds]
     );
@@ -143,7 +151,23 @@ router.get("/", requireAuth, async (req, res, next) => {
       `SELECT b.*,
               CASE WHEN b.booking_status = 'pending' AND now() - b.booking_date >= interval '${HOLD_MINUTES} minutes'
                    THEN 'expired' ELSE b.booking_status END AS effective_status
+              ,journey.train_name, journey.departure_date,
+               journey.starts_at, journey.ends_at, journey.route_id
        FROM booking b
+       LEFT JOIN LATERAL (
+         SELECT tr.train_name, t.departure_date, t.route_id,
+                to_char(t.departure_date::date + sf.departure_time, 'YYYY-MM-DD"T"HH24:MI:SS') AS starts_at,
+                to_char(t.departure_date::date + st.arrival_time
+                  + CASE WHEN st.arrival_time < sf.departure_time THEN interval '1 day' ELSE interval '0 day' END,
+                  'YYYY-MM-DD"T"HH24:MI:SS') AS ends_at
+         FROM ticket tk
+         JOIN trip t ON t.trip_id = tk.trip_id
+         JOIN train tr ON tr.train_id = t.train_id
+         JOIN train_station_schedule sf ON sf.train_id = t.train_id AND sf.route_id = t.route_id AND sf.station_code = b.starts_at_station
+         JOIN train_station_schedule st ON st.train_id = t.train_id AND st.route_id = t.route_id AND st.station_code = b.ends_at_station
+         WHERE tk.pnr_number = b.pnr_number
+         ORDER BY tk.ticket_id LIMIT 1
+       ) journey ON true
        WHERE b.user_id = $1
        ORDER BY b.booking_date DESC`,
       [req.user.user_id]
@@ -152,6 +176,40 @@ router.get("/", requireAuth, async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// Public ticket verification requires both the PNR and the booking owner email.
+router.get("/verify", async (req, res, next) => {
+  try {
+    const pnr = normalizePnr(req.query.pnr);
+    const email = typeof req.query.email === "string" ? req.query.email.trim().toLowerCase() : "";
+    if (!pnr || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: "Enter a valid PNR and the email used for the booking." });
+    }
+    const { rows } = await pool.query(
+      `SELECT b.pnr_number, b.booking_status, b.starts_at_station, b.ends_at_station, b.fare,
+              u.email, t.departure_date, tr.train_name,
+              to_char(t.departure_date::date + sf.departure_time, 'YYYY-MM-DD"T"HH24:MI:SS') AS starts_at,
+              to_char(t.departure_date::date + st.arrival_time
+                + CASE WHEN st.arrival_time < sf.departure_time THEN interval '1 day' ELSE interval '0 day' END,
+                'YYYY-MM-DD"T"HH24:MI:SS') AS ends_at
+       FROM booking b JOIN users u ON u.user_id = b.user_id
+       JOIN ticket tk ON tk.pnr_number = b.pnr_number AND tk.ticket_status = 'active'
+       JOIN trip t ON t.trip_id = tk.trip_id JOIN train tr ON tr.train_id = t.train_id
+       JOIN train_station_schedule sf ON sf.train_id = t.train_id AND sf.route_id = t.route_id AND sf.station_code = b.starts_at_station
+       JOIN train_station_schedule st ON st.train_id = t.train_id AND st.route_id = t.route_id AND st.station_code = b.ends_at_station
+       WHERE b.pnr_number = $1 AND lower(u.email) = $2
+       ORDER BY tk.ticket_id LIMIT 1`, [pnr, email]
+    );
+    if (!rows.length) return res.status(404).json({ error: "No active ticket matches that PNR and email." });
+    const ticketRows = await pool.query(
+      `SELECT passenger_name, passenger_age, seat_number, coach_number, coach_type
+       FROM ticket tk JOIN seat s ON s.seat_id = tk.seat_id JOIN coach c ON c.coach_id = s.coach_id
+       WHERE tk.pnr_number = $1 AND tk.ticket_status = 'active' ORDER BY tk.ticket_id`, [pnr]
+    );
+    const { email: _privateEmail, ...booking } = rows[0];
+    res.json({ ...booking, tickets: ticketRows.rows });
+  } catch (err) { next(err); }
 });
 
 router.get("/:pnr", requireAuth, async (req, res, next) => {
@@ -236,6 +294,50 @@ router.delete("/:pnr", requireAuth, async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// Cancels one passenger ticket; paid tickets receive an immediate recorded
+// full-price simulated refund (the prototype does not connect to a gateway).
+router.delete("/:pnr/tickets/:ticketId", requireAuth, async (req, res, next) => {
+  const pnr = normalizePnr(req.params.pnr);
+  const ticketId = parsePositiveId(req.params.ticketId);
+  if (!pnr || !ticketId) return res.status(400).json({ error: "Invalid booking or ticket reference." });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const bRes = await client.query("SELECT * FROM booking WHERE pnr_number = $1 FOR UPDATE", [pnr]);
+    if (!bRes.rowCount) throw httpError(404, "Booking not found.");
+    const booking = bRes.rows[0];
+    if (booking.user_id !== req.user.user_id) throw httpError(403, "This booking does not belong to you.");
+    const ticketRes = await client.query(
+      `SELECT tk.* FROM ticket tk WHERE tk.ticket_id = $1 AND tk.pnr_number = $2 FOR UPDATE`, [ticketId, pnr]
+    );
+    if (!ticketRes.rowCount || ticketRes.rows[0].ticket_status !== "active") throw httpError(404, "Active ticket not found.");
+    if (!["pending", "confirmed"].includes(booking.booking_status)) throw httpError(409, "This booking can no longer be changed.");
+    if (booking.booking_status === "pending" && Date.now() - new Date(booking.booking_date).getTime() >= HOLD_MINUTES * 60000) {
+      throw httpError(410, "The payment hold has expired.");
+    }
+    const ticket = ticketRes.rows[0];
+    const payRes = await client.query("SELECT * FROM payment WHERE pnr_number = $1", [pnr]);
+    let refund = null;
+    if (payRes.rowCount) {
+      const refundRes = await client.query(
+        `INSERT INTO ticket_refund (ticket_id, payment_id, amount) VALUES ($1, $2, $3)
+         RETURNING amount, refund_status, processed_at`, [ticketId, payRes.rows[0].payment_id, ticket.price]
+      );
+      refund = refundRes.rows[0];
+    } else {
+      await client.query("UPDATE booking SET fare = GREATEST(0, fare - $2) WHERE pnr_number = $1", [pnr, ticket.price]);
+    }
+    await client.query("UPDATE ticket SET ticket_status = 'cancelled' WHERE ticket_id = $1", [ticketId]);
+    const remaining = await client.query("SELECT COUNT(*)::int AS count FROM ticket WHERE pnr_number = $1 AND ticket_status = 'active'", [pnr]);
+    if (remaining.rows[0].count === 0) await client.query("UPDATE booking SET booking_status = 'cancelled' WHERE pnr_number = $1", [pnr]);
+    await client.query("COMMIT");
+    res.json({ ticket_id: ticketId, ticket_status: "cancelled", refund });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    next(err);
+  } finally { client.release(); }
 });
 
 module.exports = router;

@@ -32,6 +32,11 @@ public/
 For an existing database, apply train stop times with `npm run migrate:train-schedule`
 followed by `npm run migrate:seed-train-times`. New databases get the schedule table
 from `database/schema.sql`; `database/seed.js` fills each seeded train's stop times.
+To add the expanded station network and daily services to an existing database, run
+`npm run migrate:daily-services`. Search then creates a date-specific trip from each
+complete timetable when requested, for dates up to one year ahead.
+For per-ticket cancellation/refund records and train reviews, apply
+`npm run migrate:reviews-refunds`.
 Contact form storage can be added to an existing database with
 `npm run migrate:contact-messages`.
 
@@ -82,7 +87,19 @@ For an existing database created before these changes, run these one-time migrat
 npm run migrate:roles
 npm run migrate:auth-sessions
 npm run migrate:constraints
+npm run migrate:password-reset
 ```
+
+## Gmail password reset
+
+Add these values to the server's `.env` to enable one-time password reset codes:
+
+```dotenv
+GMAIL_USER=your-gmail-address@gmail.com
+GMAIL_APP_PASSWORD=your-google-app-password
+```
+
+Use a Google App Password for the Gmail account (with 2-Step Verification enabled), not the account's normal password. Restart the server after saving the values. Codes are valid for 10 minutes, limited to five attempts, and can be requested once per minute. Existing sessions are signed out after a successful reset.
 
 ## 4. Run it
 
@@ -100,6 +117,8 @@ server or CORS setup to worry about.
 |---|---|---|---|
 | POST | `/api/auth/register`                     | –    | `{first_name,last_name,email,password}` |
 | POST | `/api/auth/login`                        | –    | `{email,password}` → HTTP-only session cookie + `{user}` |
+| POST | `/api/auth/password-reset/request`         | –    | `{email}` → emails a short-lived Gmail verification code |
+| POST | `/api/auth/password-reset/confirm`         | –    | `{email,otp,password}` → verifies code and changes password |
 | GET  | `/api/auth/me`                           | ✓    | returns the decoded token's user |
 | POST | `/api/auth/logout`                       | ✓    | revokes the server-side session and clears its cookie |
 | GET  | `/api/stations`                          | –    | all stations |

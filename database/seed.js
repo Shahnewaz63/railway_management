@@ -16,13 +16,26 @@ const STATIONS = [
   ["KHL", "Khulna Railway Station", "Khulna"],
   ["BSL", "Bhairab Bazar Railway Station", "Bhairab"],
   ["AKR", "Akhaura Railway Station", "Akhaura"],
+  ["COM", "Cumilla Railway Station", "Cumilla"],
+  ["FNI", "Feni Railway Station", "Feni"],
+  ["COX", "Cox's Bazar Railway Station", "Cox's Bazar"],
+  ["LKS", "Laksham Junction", "Laksham"],
+  ["NOK", "Noakhali Railway Station", "Noakhali"],
+  ["MYM", "Mymensingh Railway Station", "Mymensingh"],
+  ["JML", "Jamalpur Town Railway Station", "Jamalpur"],
+  ["TNG", "Tangail Railway Station", "Tangail"],
+  ["ISD", "Ishwardi Junction", "Ishwardi"],
+  ["JSR", "Jashore Junction", "Jashore"],
+  ["SRE", "Sreemangal Railway Station", "Sreemangal"],
 ];
 
 const ROUTE_DEFS = [
-  { name: "Dhaka - Chittagong Main Line", stops: [["DHK", 1], ["AKR", 2], ["CTG", 3]] },
-  { name: "Dhaka - Sylhet Line", stops: [["DHK", 1], ["BSL", 2], ["SYL", 3]] },
-  { name: "Dhaka - Rajshahi Line", stops: [["DHK", 1], ["RAJ", 2]] },
-  { name: "Dhaka - Khulna Line", stops: [["DHK", 1], ["KHL", 2]] },
+  { name: "Dhaka - Chittagong Main Line", stops: [["DHK", 1], ["BSL", 2], ["AKR", 3], ["LKS", 4], ["COM", 5], ["FNI", 6], ["CTG", 7], ["COX", 8]] },
+  { name: "Dhaka - Sylhet Line", stops: [["DHK", 1], ["BSL", 2], ["SRE", 3], ["SYL", 4]] },
+  { name: "Dhaka - Rajshahi Line", stops: [["DHK", 1], ["TNG", 2], ["ISD", 3], ["RAJ", 4]] },
+  { name: "Dhaka - Khulna Line", stops: [["DHK", 1], ["JSR", 2], ["KHL", 3]] },
+  { name: "Dhaka - Noakhali Connector", stops: [["DHK", 1], ["BSL", 2], ["AKR", 3], ["LKS", 4], ["NOK", 5]] },
+  { name: "Dhaka - Mymensingh Line", stops: [["DHK", 1], ["MYM", 2], ["JML", 3]] },
 ];
 
 const TRAIN_DEFS = [
@@ -75,10 +88,46 @@ const TRAIN_DEFS = [
       { number: 3, type: "AC Chair", capacity: 32 },
     ],
   },
+  {
+    name: "Titas Express",
+    route: "Dhaka - Chittagong Main Line",
+    start: "10:00",
+    coaches: [
+      { number: 1, type: "Shuvon Chair", capacity: 48 },
+      { number: 2, type: "Snigdha", capacity: 32 },
+    ],
+  },
+  {
+    name: "Meghna Express",
+    route: "Dhaka - Noakhali Connector",
+    start: "08:00",
+    coaches: [
+      { number: 1, type: "Shuvon Chair", capacity: 48 },
+      { number: 2, type: "Snigdha", capacity: 32 },
+    ],
+  },
+  {
+    name: "Brahmaputra Express",
+    route: "Dhaka - Mymensingh Line",
+    start: "16:00",
+    coaches: [
+      { number: 1, type: "Shuvon Chair", capacity: 48 },
+      { number: 2, type: "Snigdha", capacity: 32 },
+    ],
+  },
+  {
+    name: "Madhumati Express",
+    route: "Dhaka - Khulna Line",
+    start: "21:00",
+    coaches: [
+      { number: 1, type: "Shuvon Chair", capacity: 48 },
+      { number: 2, type: "Snigdha", capacity: 32 },
+    ],
+  },
 ];
 
 const SEAT_TYPE_CYCLE = ["Window", "Aisle", "Aisle", "Window"];
-const TRIP_DAYS_AHEAD = 21;
+const TRIP_DAYS_AHEAD = 31;
 
 async function run() {
   const client = await pool.connect();
@@ -121,7 +170,7 @@ async function run() {
       const startMinutes = startHour * 60 + startMinute;
       for (let i = 0; i < stops.length; i++) {
         const [stationCode] = stops[i];
-        const at = startMinutes + i * 120;
+        const at = startMinutes + i * 90;
         const fmt = (mins) => `${String(Math.floor((mins % 1440) / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}:00`;
         const arrival = i === 0 ? fmt(at) : fmt(at - 10);
         const departure = i === stops.length - 1 ? fmt(at) : fmt(at + 10);

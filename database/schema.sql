@@ -96,6 +96,19 @@ CREATE TABLE auth_session (
 CREATE INDEX idx_auth_session_active ON auth_session (user_id, expires_at)
   WHERE revoked_at IS NULL;
 
+CREATE TABLE password_reset_otp (
+  reset_id    BIGSERIAL PRIMARY KEY,
+  user_id     INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  otp_hash    CHAR(64) NOT NULL,
+  attempts    SMALLINT NOT NULL DEFAULT 0 CHECK (attempts BETWEEN 0 AND 5),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at  TIMESTAMPTZ NOT NULL,
+  consumed_at TIMESTAMPTZ
+);
+CREATE INDEX idx_password_reset_otp_user_active
+  ON password_reset_otp (user_id, created_at DESC)
+  WHERE consumed_at IS NULL;
+
 CREATE TABLE booking (
   pnr_number         VARCHAR(20) PRIMARY KEY,
   user_id            INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
@@ -115,7 +128,8 @@ CREATE TABLE ticket (
   seat_id         INT NOT NULL REFERENCES seat(seat_id) ON DELETE CASCADE,
   passenger_name  VARCHAR(100) NOT NULL,
   passenger_age   INT NOT NULL CHECK (passenger_age BETWEEN 1 AND 120),
-  price           NUMERIC(10,2) NOT NULL CHECK (price >= 0)
+  price           NUMERIC(10,2) NOT NULL CHECK (price >= 0),
+  ticket_status   VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (ticket_status IN ('active', 'cancelled'))
 );
 
 CREATE TABLE payment (
@@ -125,6 +139,27 @@ CREATE TABLE payment (
   payment_method  VARCHAR(50) NOT NULL CHECK (payment_method IN ('bKash', 'Nagad', 'Card')),
   UNIQUE (pnr_number)
 );
+
+CREATE TABLE ticket_refund (
+  refund_id     SERIAL PRIMARY KEY,
+  ticket_id     INT NOT NULL UNIQUE REFERENCES ticket(ticket_id) ON DELETE CASCADE,
+  payment_id    INT REFERENCES payment(payment_id) ON DELETE SET NULL,
+  amount        NUMERIC(10,2) NOT NULL CHECK (amount >= 0),
+  refund_status VARCHAR(20) NOT NULL DEFAULT 'processed' CHECK (refund_status IN ('processed')),
+  processed_at  TIMESTAMP(6) NOT NULL DEFAULT now()
+);
+
+CREATE TABLE train_review (
+  review_id   SERIAL PRIMARY KEY,
+  user_id     INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  train_id    INT NOT NULL REFERENCES train(train_id) ON DELETE CASCADE,
+  route_id    INT NOT NULL REFERENCES route(route_id) ON DELETE CASCADE,
+  rating      INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  comment     VARCHAR(1000) NOT NULL,
+  created_at  TIMESTAMP(6) NOT NULL DEFAULT now(),
+  UNIQUE (user_id, train_id, route_id)
+);
+CREATE INDEX idx_train_review_route ON train_review (train_id, route_id, created_at DESC);
 
 CREATE TABLE contact_message (
   contact_id    SERIAL PRIMARY KEY,

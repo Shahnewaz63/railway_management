@@ -45,7 +45,7 @@ router.get("/:tripId/coaches/:coachId/seats", async (req, res, next) => {
               EXISTS (
                 SELECT 1 FROM ticket tk
                 JOIN booking b ON b.pnr_number = tk.pnr_number
-                WHERE tk.seat_id = s.seat_id AND tk.trip_id = $1
+                WHERE tk.seat_id = s.seat_id AND tk.trip_id = $1 AND tk.ticket_status = 'active'
                   AND (b.booking_status = 'confirmed'
                        OR (b.booking_status = 'pending' AND now() - b.booking_date < interval '${HOLD_MINUTES} minutes'))
               ) AS taken

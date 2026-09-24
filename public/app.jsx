@@ -69,10 +69,15 @@ const ROUTE_PATHS = {
   about: "/about",
   contact: "/contact",
   account: "/account",
+  verify: "/verify-ticket",
+  routes: "/routes",
+  stations: "/stations",
 };
 const PAGE_FROM_PATH = Object.fromEntries(Object.entries(ROUTE_PATHS).map(([k, v]) => [v, k]));
 function pageFromLocation() {
-  return PAGE_FROM_PATH[window.location.pathname] || "home";
+  const pathname = window.location.pathname.replace(/\/+$/, "") || "/";
+  if (pathname === "/admin/dashboard" || pathname === "/admin-dashboard") return "admin";
+  return PAGE_FROM_PATH[pathname] || "home";
 }
 
 // Pages that require *some* signed-in user.
@@ -92,22 +97,23 @@ function useTheme() {
   const [theme, setTheme] = useState(localStorage.getItem("bdr_theme") || "light");
   useEffect(() => localStorage.setItem("bdr_theme", theme), [theme]);
   const dark = theme === "dark";
+  useEffect(() => { document.documentElement.dataset.theme = dark ? "dark" : "light"; }, [dark]);
   // A single, restrained railway-green accent ("brand", defined once in
   // index.html's tailwind.config) over a neutral gray scale carries through
   // both light and dark mode — one consistent design language, not two.
   const t = {
     dark,
-    pageBg: dark ? "bg-neutral-950" : "bg-[#FAFAF9]",
-    text: dark ? "text-neutral-100" : "text-neutral-900",
-    subtext: dark ? "text-neutral-400" : "text-neutral-500",
-    navBg: dark ? "bg-neutral-950/95 border-neutral-800" : "bg-white/95 border-neutral-200",
-    cardBg: dark ? "bg-neutral-900 border-neutral-800" : "bg-white border-neutral-200",
-    cardAltBg: dark ? "bg-neutral-800/60 border-neutral-700" : "bg-neutral-50 border-neutral-200",
-    inputBg: dark ? "bg-neutral-900 border-neutral-700 text-neutral-100" : "bg-white border-neutral-300 text-neutral-900",
+    pageBg: dark ? "bg-[#07151e]" : "bg-[#f4f8f9]",
+    text: dark ? "text-[#edf5f7]" : "text-[#172c38]",
+    subtext: dark ? "text-[#9db2bc]" : "text-[#617681]",
+    navBg: dark ? "bg-[#091923]/95 border-[#203844]" : "bg-white/95 border-[#dce7eb]",
+    cardBg: dark ? "bg-[#0d202b] border-[#203844]" : "bg-white border-[#dce7eb]",
+    cardAltBg: dark ? "bg-[#112631] border-[#29434f]" : "bg-[#f7fafb] border-[#dce7eb]",
+    inputBg: dark ? "bg-[#091923] border-[#29434f] text-[#edf5f7]" : "bg-white border-[#cad9df] text-[#172c38]",
     hero: "bg-brand-dark",
     primary: "bg-brand hover:bg-brand-hover text-white",
-    primaryOutline: dark ? "border border-neutral-700 hover:border-brand hover:bg-neutral-800 text-neutral-100" : "border border-neutral-300 hover:border-brand hover:bg-neutral-50 text-neutral-900",
-    divider: dark ? "border-neutral-800" : "border-neutral-200",
+    primaryOutline: dark ? "border border-[#29434f] hover:border-brand hover:bg-[#142d39] text-[#edf5f7]" : "border border-[#cad9df] hover:border-brand hover:bg-[#f3f8f8] text-[#172c38]",
+    divider: dark ? "border-[#203844]" : "border-[#dce7eb]",
   };
   return { theme, setTheme, t };
 }
@@ -116,10 +122,12 @@ function useTheme() {
 
 function Badge({ children, tone = "default", t }) {
   const tones = {
-    default: t.dark ? "bg-neutral-800 text-neutral-300" : "bg-neutral-100 text-neutral-600",
+    default: t.dark ? "bg-[#203844] text-[#dbe8ed]" : "bg-[#eaf1f3] text-[#526b77]",
     success: "bg-green-50 text-green-700 border border-green-200",
     warn: "bg-amber-50 text-amber-700 border border-amber-200",
     danger: "bg-red-50 text-red-700 border border-red-200",
+    admin: "role-badge role-badge-admin",
+    customer: "role-badge role-badge-customer",
   };
   return <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${tones[tone]}`}>{children}</span>;
 }
@@ -190,18 +198,18 @@ function StationSelect({ value, onChange, t, stations, excludeCode, label }) {
     <div className="relative" ref={ref}>
       <button type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)}
         className={`w-full px-3.5 py-3 rounded-lg border text-left flex items-center gap-3 transition-colors ${t.inputBg} hover:border-brand`}>
-        <span className="text-lg text-brand">{label === "From" ? "↗" : "↘"}</span>
+        <span className="text-brand" aria-hidden="true"><svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 20V7m14 13V7M3 20h18M7 7h10M9 4h6M12 4v16" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
         <span className="flex-1 min-w-0">
           <span className={`block text-[11px] uppercase tracking-[.14em] font-semibold ${t.subtext}`}>{label || "Station"}</span>
           <span className={`block truncate text-sm font-semibold ${selected ? t.text : t.subtext}`}>{selected ? `${selected.station_name} · ${selected.city}` : "Choose a station"}</span>
         </span>
-        <span className={`text-xs ${t.subtext}`}>⌄</span>
+        <span className={`text-xs ${t.subtext}`} aria-hidden="true">{String.fromCharCode(8964)}</span>
       </button>
       {open && (
         <div role="listbox" className={`station-menu absolute left-0 right-0 z-40 mt-2 rounded-lg border shadow-lg overflow-hidden ${t.cardBg}`}>
           <div className={`p-2 border-b ${t.divider}`}>
             <div className={`flex items-center gap-2 px-3 rounded-lg border ${t.cardAltBg}`}>
-              <span className={t.subtext}>⌕</span>
+              <span className={t.subtext} aria-hidden="true"><svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4" strokeLinecap="round"/></svg></span>
               <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search station or city…"
                 className={`w-full bg-transparent py-2.5 text-sm outline-none ${t.text}`} />
             </div>
@@ -225,10 +233,10 @@ function JourneySummary({ t, trainName, fromCity, toCity, date, klass, coachNumb
   return (
     <div className={`rounded-lg border p-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm ${t.cardAltBg}`}>
       <div><p className={t.subtext}>Train</p><p className={`font-medium ${t.text}`}>{trainName}</p></div>
-      <div><p className={t.subtext}>Route</p><p className={`font-medium ${t.text}`}>{fromCity} → {toCity}</p></div>
+      <div><p className={t.subtext}>Route</p><p className={`font-medium ${t.text}`}>{fromCity} â†’ {toCity}</p></div>
       <div><p className={t.subtext}>Date</p><p className={`font-medium ${t.text}`}>{fmtDate(date)}</p></div>
       <div><p className={t.subtext}>Class</p><p className={`font-medium ${t.text}`}>{klass}{coachNumber != null ? ` · Coach ${coachNumber}` : ""}</p></div>
-      {fare != null && <div><p className={t.subtext}>Fare / seat</p><p className={`font-medium ${t.text}`}>৳{fare}</p></div>}
+      {fare != null && <div><p className={t.subtext}>Fare / seat</p><p className={`font-medium ${t.text}`}>à§³{fare}</p></div>}
     </div>
   );
 }
@@ -241,39 +249,50 @@ function JourneySummary({ t, trainName, fromCity, toCity, date, klass, coachNumb
 function BrandMark({ t }) {
   return (
     <span className="flex items-center gap-2.5">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand text-white">
+      <span className="brand-mark flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand text-white">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <path d="M5 18L10.5 6M19 18L13.5 6" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" />
           <path d="M3 20.5h18" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" />
         </svg>
       </span>
-      <span className={`text-[17px] font-bold tracking-tight ${t.text}`}>RailX <span className="text-brand">BD</span></span>
+      <span className={`brand-label text-[17px] font-bold tracking-tight ${t.text}`}>RailX <span className="text-brand">BD</span></span>
     </span>
   );
 }
 
 /* ============================== Nav ============================== */
 
-function NavBar({ page, go, t, setTheme, currentUser, logout, logoutPending }) {
+function NavBar({ page, go, onAnchor, t, setTheme, currentUser, logout, logoutPending }) {
   const [open, setOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(window.scrollY > 20);
+  useEffect(() => {
+    const update = () => setScrolled(window.scrollY > 20);
+    window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
+  }, []);
   const links = [
     { key: "home", label: "Home" },
+    { key: "verify", label: "Verify Ticket" },
+    { key: "status", label: "Live Status", anchor: "scheduled-trains" },
+    { key: "routes", label: "Routes" },
+    { key: "stations", label: "Stations" },
     { key: "classinfo", label: "Class Info" },
-    { key: "about", label: "About Us" },
     { key: "contact", label: "Contact" },
   ];
   const visibleLinks = links.filter((link) => link.key !== "contact" || currentUser?.role === "customer");
+  const headerClass = page === "home" ? `glass-nav fixed left-0 right-0 top-0 z-30 border-b ${scrolled || open ? "scrolled" : ""}` : `sticky top-0 z-30 border-b backdrop-blur ${t.navBg}`;
+  const handleLink = (link) => { if (link.anchor) onAnchor(link.anchor); else go(link.key); setOpen(false); };
   return (
-    <header className={`sticky top-0 z-30 border-b backdrop-blur ${t.navBg}`}>
+    <header className={headerClass}>
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
         <button onClick={() => go("home")} aria-label="RailX BD home">
           <BrandMark t={t} />
         </button>
 
-        <nav className="hidden md:flex items-center gap-7">
+        <nav className="hidden md:flex items-center gap-3 lg:gap-5">
           {visibleLinks.map((l) => (
-            <button key={l.key} onClick={() => go(l.key)} className={`relative py-1 text-sm font-medium transition-colors ${page === l.key ? "text-brand" : t.subtext} hover:text-brand`}>
+            <button key={l.key} onClick={() => handleLink(l)} className={`home-nav-text relative py-1 text-sm font-medium transition-colors ${page === l.key ? "text-brand" : t.subtext} hover:text-brand`}>
               {l.label}
               {page === l.key && <span className="absolute -bottom-[17px] left-0 right-0 h-0.5 rounded-full bg-brand" />}
             </button>
@@ -288,7 +307,7 @@ function NavBar({ page, go, t, setTheme, currentUser, logout, logoutPending }) {
             <div className="relative">
               <button aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)} className={`flex items-center gap-2 px-3 py-2 rounded-lg ${t.primaryOutline}`}>
                 <span className="text-sm font-medium">{currentUser.first_name}</span>
-                <Badge t={t} tone={currentUser.role === "admin" ? "success" : "default"}>{currentUser.role === "admin" ? "Admin" : "Customer"}</Badge>
+                <Badge t={t} tone={currentUser.role === "admin" ? "admin" : "customer"}>{currentUser.role === "admin" ? "Admin" : "Customer"}</Badge>
                 <span aria-hidden="true">&#9662;</span>
               </button>
               {menuOpen && (
@@ -311,12 +330,12 @@ function NavBar({ page, go, t, setTheme, currentUser, logout, logoutPending }) {
       {open && (
         <div className={`md:hidden border-t ${t.divider} px-4 py-4 flex flex-col gap-3`}>
           {visibleLinks.map((l) => (
-            <button key={l.key} onClick={() => { go(l.key); setOpen(false); }} className={`text-left text-sm font-medium ${page === l.key ? "text-brand" : t.text}`}>{l.label}</button>
+            <button key={l.key} onClick={() => handleLink(l)} className={`text-left text-sm font-medium ${page === l.key ? "text-brand" : t.text}`}>{l.label}</button>
           ))}
           <div className={`h-px border-t ${t.divider}`} />
           {currentUser ? (
             <>
-              <p className={`text-xs ${t.subtext}`}>Signed in as <span className="font-medium">{currentUser.role === "admin" ? "Administrator" : "Customer"}</span></p>
+              <p className={`flex items-center gap-2 text-xs ${t.subtext}`}>Signed in as <Badge t={t} tone={currentUser.role === "admin" ? "admin" : "customer"}>{currentUser.role === "admin" ? "Admin" : "Customer"}</Badge></p>
               <button onClick={() => { go("mybookings"); setOpen(false); }} className={`text-left text-sm font-medium ${t.text}`}>My Bookings</button>
               {currentUser.role === "admin" && <button onClick={() => { go("admin"); setOpen(false); }} className={`text-left text-sm font-medium ${t.text}`}>Admin Dashboard</button>}
               <button disabled={logoutPending} onClick={() => { logout(); setOpen(false); }} className="text-left text-sm font-medium text-red-600 disabled:opacity-50">{logoutPending ? "Logging out…" : "Logout"}</button>
@@ -335,10 +354,10 @@ function NavBar({ page, go, t, setTheme, currentUser, logout, logoutPending }) {
 
 /* ============================== Search card ============================== */
 
-function SearchCard({ t, search, setSearch, onSubmit, error, stations, classTypes }) {
+function SearchCard({ t, search, setSearch, onSubmit, error, stations, classTypes, glass = false }) {
   const swap = () => setSearch((s) => ({ ...s, from: s.to, to: s.from }));
   return (
-    <div className={`rounded-xl border shadow-sm p-5 md:p-6 ${t.cardBg}`}>
+    <div className={`${glass ? "hero-glass" : `rounded-xl border shadow-sm ${t.cardBg}`} rounded-2xl p-5 md:p-6`}>
       <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-3 items-end">
         <Field label="From" t={t}><StationSelect label="From" value={search.from} onChange={(v) => setSearch((s) => ({ ...s, from: v }))} t={t} stations={stations} excludeCode={search.to} /></Field>
         <button onClick={swap} aria-label="Swap stations" className={`hidden md:flex items-center justify-center w-11 h-11 rounded-full mb-0.5 self-end text-lg transition-colors ${t.primaryOutline}`}>&#8646;</button>
@@ -397,7 +416,7 @@ function PopularRoutes({ t, stations, onPick }) {
   const cityOf = (code) => stations.find((s) => s.station_code === code)?.city || code;
   if (!stations.length) return null;
   return (
-    <section className="max-w-6xl mx-auto px-4 pb-16">
+    <section id="popular-routes" className="max-w-6xl mx-auto px-4 py-14 scroll-mt-24">
       <div className="mb-6">
         <h2 className={`text-2xl md:text-3xl font-bold tracking-tight ${t.text}`}>Popular routes</h2>
         <p className={`mt-1.5 text-sm ${t.subtext}`}>Jump straight to a journey you book often.</p>
@@ -407,7 +426,7 @@ function PopularRoutes({ t, stations, onPick }) {
           <button key={`${from}-${to}`} onClick={() => onPick(from, to)}
             className={`text-left rounded-xl border p-5 transition-colors ${t.cardBg} hover:border-brand`}>
             <p className={`text-xs ${t.subtext}`}>Route</p>
-            <p className={`mt-1.5 font-semibold ${t.text}`}>{cityOf(from)} <span className="text-brand">→</span> {cityOf(to)}</p>
+            <p className={`mt-1.5 font-semibold ${t.text}`}>{cityOf(from)} <span className="text-brand">â†’</span> {cityOf(to)}</p>
             <p className="mt-3 text-xs font-medium text-brand">Search this route &rarr;</p>
           </button>
         ))}
@@ -416,55 +435,72 @@ function PopularRoutes({ t, stations, onPick }) {
   );
 }
 
-function HomePage({ t, search, setSearch, doSearch, searchError, stations, classTypes }) {
-  const steps = [
-    ["01", "Pick your route", "Search by station, city, travel date and preferred class."],
-    ["02", "Choose your seat", "Compare available coaches and tap the seats you want."],
-    ["03", "Add passenger details", "Enter the name and age for every traveller."],
-    ["04", "Pay & travel", "Complete the demo payment and keep your digital ticket handy."],
+function FeaturedServices({ t, onAnchor, go }) {
+  const services = [
+    ["â—‰", "Scheduled train status", "See published departure and arrival times.", "scheduled-trains", "section"],
+    ["âœ¦", "Travel help", "Find answers about booking, payment and seats.", "about", "page"],
+    ["â—·", "Train schedules", "Compare departure, arrival and journey duration.", "search-card", "section"],
+    ["à§³", "Fare information", "Review available classes and ticket fares.", "classinfo", "page"],
+    ["âŒ‚", "Station guide", "Browse stations in the booking network.", "station-guide", "section"],
   ];
-  const pickRoute = (from, to) => {
-    setSearch((s) => ({ ...s, from, to }));
-    document.getElementById("search-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
+  return <section className="max-w-6xl mx-auto px-4 py-14"><div className="mb-7 max-w-xl"><p className="text-xs font-bold uppercase tracking-[.2em] text-brand">Designed around your trip</p><h2 className={`mt-2 text-3xl font-bold tracking-tight ${t.text}`}>Everything you need for your journey</h2></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{services.map(([icon, title, copy, target, type], i) => <button key={title} onClick={() => type === "page" ? go(target) : onAnchor(target)} className={`service-card reveal rounded-2xl border p-5 text-left ${t.cardBg}`} style={{ animationDelay: `${i * 55}ms` }}><span className="service-icon flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-xl font-bold text-brand">{icon}</span><h3 className={`mt-5 font-bold ${t.text}`}>{title}</h3><p className={`mt-2 text-sm leading-relaxed ${t.subtext}`}>{copy}</p><span className="mt-4 inline-flex text-sm font-semibold text-brand">Explore â†’</span></button>)}</div></section>;
+}
+
+function UpcomingTrains({ t, search, stations, onSearch }) {
+  const [trips, setTrips] = useState(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    setTrips(null);
+    api(`/search?from=${search.from}&to=${search.to}&date=${search.date}`).then((rows) => { if (active) setTrips(rows.slice(0, 3)); }).catch((e) => { if (active) { setError(e.message); setTrips([]); } });
+    return () => { active = false; };
+  }, [search.from, search.to, search.date]);
+  const from = stations.find((s) => s.station_code === search.from);
+  const to = stations.find((s) => s.station_code === search.to);
+  const time = (value) => new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return <section id="scheduled-trains" className="max-w-6xl mx-auto px-4 py-14 scroll-mt-24"><div className="mb-6 flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[.2em] text-brand">Published timetable</p><h2 className={`mt-2 text-3xl font-bold tracking-tight ${t.text}`}>Scheduled trains</h2><p className={`mt-1 text-sm ${t.subtext}`}>{from?.city} to {to?.city} · {fmtDate(search.date)}</p></div><button onClick={onSearch} className="text-sm font-semibold text-brand">View all trains â†’</button></div>{error && <ErrorBanner message={error} />}{trips === null && <p className={t.subtext}>Loading timetable…</p>}{trips?.length === 0 && <p className={`rounded-2xl border p-6 text-sm ${t.cardBg} ${t.subtext}`}>No scheduled trains were found for this route and date.</p>}{trips?.length > 0 && <div className="grid gap-4 md:grid-cols-3">{trips.map((trip) => <article key={trip.trip_id} className={`service-card rounded-2xl border p-5 ${t.cardBg}`}><div className="flex justify-between"><div><h3 className={`font-bold ${t.text}`}>{trip.train_name}</h3><p className={`mt-1 text-xs ${t.subtext}`}>Train {trip.train_id}</p></div><span className="route-pulse rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Scheduled</span></div><div className="mt-5 flex items-center gap-3"><div><p className={`text-lg font-bold ${t.text}`}>{time(trip.origin_departure)}</p><p className={`text-xs ${t.subtext}`}>{from?.city}</p></div><div className="flex-1 border-t border-emerald-200"/><div className="text-right"><p className={`text-lg font-bold ${t.text}`}>{time(trip.destination_arrival)}</p><p className={`text-xs ${t.subtext}`}>{to?.city}</p></div></div><button onClick={onSearch} className="mt-5 text-sm font-semibold text-brand">View journey â†’</button></article>)}</div>}<p className={`mt-3 text-xs ${t.subtext}`}>Published timetable only; live location and delay data are not available.</p></section>;
+}
+
+function StationGuide({ t, stations, onPick }) {
+  return <section id="station-guide" className="max-w-6xl mx-auto px-4 py-14 scroll-mt-24"><div className="mb-6"><p className="text-xs font-bold uppercase tracking-[.2em] text-brand">Network guide</p><h2 className={`mt-2 text-3xl font-bold tracking-tight ${t.text}`}>Stations on your network</h2><p className={`mt-1 text-sm ${t.subtext}`}>Choose a station to start a search from there.</p></div><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{stations.map((station) => <button key={station.station_code} onClick={() => onPick(station.station_code)} className={`service-card rounded-2xl border p-4 text-left ${t.cardBg}`}><span className="text-xs font-bold tracking-widest text-brand">{station.station_code}</span><p className={`mt-2 text-sm font-bold ${t.text}`}>{station.station_name}</p><p className={`mt-1 text-xs ${t.subtext}`}>{station.city}</p></button>)}</div></section>;
+}
+
+function RouteDirectory({ t, onPick }) {
+  const [routes, setRoutes] = useState([]);
+  const [error, setError] = useState("");
+  useEffect(() => { api("/routes").then((rows) => { setRoutes(rows); setError(""); }).catch((e) => setError(e.message)); }, []);
+  return <section id="popular-routes" className="mx-auto max-w-6xl scroll-mt-24 px-4 py-14"><div className="mb-6"><p className="text-xs font-bold uppercase tracking-[.2em] text-brand">Rail network</p><h2 className={`mt-2 text-3xl font-bold tracking-tight ${t.text}`}>Routes and stations</h2><p className={`mt-1 text-sm ${t.subtext}`}>Browse every stop along each available route.</p></div>{error && <ErrorBanner message={error} />}{!error && routes.length === 0 && <p className={`rounded-xl border p-4 text-sm ${t.cardBg} ${t.subtext}`}>No routes are available yet.</p>}<div className="grid gap-4 md:grid-cols-2">{routes.map((route) => <article key={route.route_id} className={`rounded-2xl border p-5 ${t.cardBg}`}><h3 className={`font-semibold ${t.text}`}>{route.route_name}</h3><div className="mt-4 flex flex-wrap items-center gap-2">{route.stations.map((station, i) => <React.Fragment key={station.station_code}><span className={`rounded-full border px-2.5 py-1 text-xs ${t.cardAltBg} ${t.text}`} title={station.station_name}>{station.city} ({station.station_code})</span>{i < route.stations.length - 1 && <span className="text-brand" aria-hidden="true">&#8250;</span>}</React.Fragment>)}</div><button onClick={() => onPick(route.stations[0].station_code, route.stations[route.stations.length - 1].station_code)} className="mt-4 text-sm font-semibold text-brand">Search this route &#8594;</button></article>)}</div></section>;
+}
+function HomePage({ t, search, setSearch, doSearch, searchError, stations, classTypes, go, onAnchor }) {
   return (
     <div>
-      <section className={`${t.hero} relative overflow-hidden text-white`}>
-        <div className="max-w-6xl mx-auto px-4 pt-14 pb-24 md:pt-20 md:pb-28 relative">
-          <div className="max-w-3xl float-in">
-            <h1 className="text-3xl md:text-5xl font-bold leading-[1.1] tracking-tight">Go further. Feel closer.</h1>
-            <p className="mt-5 max-w-xl text-base leading-relaxed text-neutral-300">A smarter, smoother way to discover Bangladesh by rail. Find a train, choose your seat, and book the journey in a few easy steps.</p>
-            <div className="mt-8 max-w-xl"><StatStrip stations={stations} classTypes={classTypes} /></div>
+      <section className="home-hero relative min-h-[700px] overflow-hidden text-white">
+        <svg className="pointer-events-none absolute right-[8%] top-32 hidden h-64 w-[42%] opacity-30 md:block" viewBox="0 0 600 240" fill="none" aria-hidden="true"><path d="M8 198C130 198 128 48 286 48S428 198 592 198" stroke="white" strokeWidth="1.5" strokeDasharray="5 8"/><circle cx="8" cy="198" r="5" fill="white"/><circle cx="592" cy="198" r="5" fill="white"/><circle className="route-pulse" cx="286" cy="48" r="6" fill="#A7F3D0"/></svg>
+        <div className="pointer-events-none absolute -right-20 top-24 h-72 w-72 rounded-full bg-sky-200/10 blur-3xl" />
+        <div className="relative z-10 mx-auto max-w-6xl px-4 pb-16 pt-32 md:pb-20 md:pt-36">
+          <div className="max-w-3xl reveal">
+            <p className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-semibold tracking-wide text-white/90 backdrop-blur">BANGLADESH RAILWAY · YOUR NEXT JOURNEY</p>
+            <h1 className="mt-6 text-4xl font-bold leading-[1.06] tracking-tight sm:text-5xl md:text-6xl">Your journey<br className="hidden sm:block"/> starts here.</h1>
+            <p className="mt-5 max-w-xl text-base leading-relaxed text-white/85 md:text-lg">Discover trains, plan your journey, check schedules and travel smarter across Bangladesh.</p>
           </div>
+          <div id="search-card" className="mt-9 max-w-5xl scroll-mt-24 reveal" style={{ animationDelay: "140ms" }}>
+            <SearchCard t={t} search={search} setSearch={setSearch} onSubmit={doSearch} error={searchError} stations={stations} classTypes={classTypes} glass />
+          </div>
+          <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-medium text-white/80"><span>âœ“ Schedule based results</span><span>âœ“ Live seat availability</span><span>âœ“ Secure booking holds</span></div>
         </div>
       </section>
-      <div id="search-card" className="max-w-5xl mx-auto px-4 -mt-16 md:-mt-20 relative z-10 scroll-mt-24">
-        <SearchCard t={t} search={search} setSearch={setSearch} onSubmit={doSearch} error={searchError} stations={stations} classTypes={classTypes} />
-      </div>
-      <PopularRoutes t={t} stations={stations} onPick={pickRoute} />
-      <section className="max-w-6xl mx-auto px-4 pb-20">
-        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
-          <h2 className={`text-2xl md:text-3xl font-bold tracking-tight ${t.text}`}>Your trip, made simple</h2>
-          <p className={`max-w-sm text-sm leading-relaxed ${t.subtext}`}>From your first search to the final ticket, everything you need is in one clear flow.</p>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {steps.map(([number, title, copy], index) => (
-            <div key={number} className={`relative rounded-xl border p-5 ${t.cardBg} ${index === 0 ? "ring-1 ring-brand/25" : ""}`}>
-              <span className="text-2xl font-bold text-brand/25">{number}</span>
-              <h3 className={`mt-4 font-semibold ${t.text}`}>{title}</h3>
-              <p className={`mt-2 text-sm leading-relaxed ${t.subtext}`}>{copy}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+      <FeaturedServices t={t} onAnchor={onAnchor} go={go} />
+      <UpcomingTrains t={t} search={search} stations={stations} onSearch={doSearch} />
     </div>
   );
 }
 
 function LoginPage({ t, pendingSearch, onLogin, stations }) {
   const [mode, setMode] = useState("login");
-  const [form, setForm] = useState({ first_name: "", last_name: "", email: "", password: "" });
+  const [resetStep, setResetStep] = useState("request");
+  const [form, setForm] = useState({ first_name: "", last_name: "", email: "", password: "", otp: "", new_password: "" });
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
   const upd = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -473,8 +509,22 @@ function LoginPage({ t, pendingSearch, onLogin, stations }) {
   const submit = async (event) => {
     event.preventDefault();
     setError("");
+    setNotice("");
     setLoading(true);
     try {
+      if (mode === "forgot") {
+        if (resetStep === "request") {
+          await api("/auth/password-reset/request", { method: "POST", body: { email: form.email } });
+          setResetStep("confirm");
+          setNotice("If this email belongs to an account, a six digit code has been sent. Check your Gmail inbox.");
+        } else {
+          await api("/auth/password-reset/confirm", { method: "POST", body: { email: form.email, otp: form.otp, password: form.new_password } });
+          setMode("login");
+          setResetStep("request");
+          setNotice("Your password has been changed. Sign in with the new password.");
+        }
+        return;
+      }
       const data = mode === "login"
         ? await api("/auth/login", { method: "POST", body: { email: form.email, password: form.password }, auth: false })
         : await api("/auth/register", { method: "POST", body: form, auth: false });
@@ -491,13 +541,13 @@ function LoginPage({ t, pendingSearch, onLogin, stations }) {
 
   return (
     <div className="max-w-md mx-auto px-4 py-14">
-      <h1 className={`text-2xl font-bold tracking-tight ${t.text}`}>{mode === "login" ? "Login" : "Create Account"}</h1>
+      <h1 className={`text-2xl font-bold tracking-tight ${t.text}`}>{mode === "login" ? "Login" : mode === "register" ? "Create Account" : "Reset your password"}</h1>
 
       {pendingSearch && (
         <div className={`mt-4 rounded-lg border p-3 text-sm ${t.cardAltBg} ${t.text}`}>
           Please log in to continue with train search and booking.
           <div className={`mt-1 ${t.subtext}`}>
-            {stationCity(pendingSearch.from)} → {stationCity(pendingSearch.to)}, {fmtDate(pendingSearch.date)}
+            {stationCity(pendingSearch.from)} â†’ {stationCity(pendingSearch.to)}, {fmtDate(pendingSearch.date)}
             {pendingSearch.klass ? `, ${pendingSearch.klass}` : ""}
           </div>
         </div>
@@ -511,17 +561,21 @@ function LoginPage({ t, pendingSearch, onLogin, stations }) {
           </div>
         )}
         <Field label="Email" t={t}><input required type="email" autoComplete="email" value={form.email} onChange={(e) => upd("email", e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
-        <Field label="Password" t={t}><input required type="password" minLength={mode === "register" ? 6 : undefined} autoComplete={mode === "login" ? "current-password" : "new-password"} value={form.password} onChange={(e) => upd("password", e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
+        {mode === "login" && <Field label="Password" t={t}><input required type="password" autoComplete="current-password" value={form.password} onChange={(e) => upd("password", e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>}
+        {mode === "register" && <Field label="Password" t={t}><input required type="password" minLength={6} autoComplete="new-password" value={form.password} onChange={(e) => upd("password", e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>}
+        {mode === "forgot" && resetStep === "confirm" && <><Field label="Six digit code" t={t}><input required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" value={form.otp} onChange={(e) => upd("otp", e.target.value.replace(/\D/g, "").slice(0, 6))} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field><Field label="New password" t={t}><input required type="password" minLength={8} autoComplete="new-password" value={form.new_password} onChange={(e) => upd("new_password", e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field></>}
         {mode === "register" && <p className={`text-xs ${t.subtext}`}>New accounts are created as customers. An existing administrator can grant administrator access later.</p>}
+        {notice && <p role="status" className="text-sm text-emerald-700">{notice}</p>}
         <ErrorBanner message={error} />
         <PrimaryButton t={t} type="submit" disabled={loading} className="w-full">
-          {loading ? "Please wait…" : mode === "login" ? "Login" : "Create Account"}
+          {loading ? "Please wait…" : mode === "login" ? "Login" : mode === "register" ? "Create Account" : resetStep === "request" ? "Send verification code" : "Change password"}
         </PrimaryButton>
         <div className="flex justify-between text-sm">
-          <button type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }} className="text-brand hover:underline font-medium">
+          <button type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setResetStep("request"); setError(""); setNotice(""); }} className="text-brand hover:underline font-medium">
             {mode === "login" ? "Create Account" : "Back to Login"}
           </button>
-          {mode === "login" && <button type="button" className="text-brand hover:underline font-medium" onClick={() => setError("Password reset is not available in this demonstration yet. Please contact an administrator.")}>Forgot Password?</button>}
+          {mode === "login" && <button type="button" className="text-brand hover:underline font-medium" onClick={() => { setMode("forgot"); setResetStep("request"); setError(""); setNotice(""); }}>Forgot Password?</button>}
+          {mode === "forgot" && resetStep === "confirm" && <button type="button" className="text-brand hover:underline font-medium" onClick={() => { setResetStep("request"); setError(""); setNotice(""); }}>Send another code</button>}
         </div>
         {mode === "login" && (
           <p className={`text-xs ${t.subtext} pt-2 border-t ${t.divider}`}>Customers and administrators use this same sign-in form. Demo customer: <b>rahim@example.com</b> / <b>password123</b>.</p>
@@ -531,7 +585,26 @@ function LoginPage({ t, pendingSearch, onLogin, stations }) {
   );
 }
 
-function ResultsPage({ t, search, go, stations }) {
+function TrainReviews({ t, trip, currentUser }) {
+  const [reviews, setReviews] = useState(null);
+  const [rating, setRating] = useState("5");
+  const [comment, setComment] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const load = () => api(`/reviews?train_id=${trip.train_id}&route_id=${trip.route_id}`).then(setReviews).catch((e) => setError(e.message));
+  useEffect(() => { load(); }, [trip.train_id, trip.route_id]);
+  const submit = async (event) => {
+    event.preventDefault(); setSaving(true); setError("");
+    try {
+      await api("/reviews", { method: "POST", body: { train_id: trip.train_id, route_id: trip.route_id, rating: Number(rating), comment } });
+      setComment(""); await load();
+    } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
+  };
+  return <details className="mt-4 border-t pt-3"><summary className="cursor-pointer text-sm font-semibold text-brand">Train reviews {reviews ? `(${reviews.length})` : ""}</summary><div className="mt-3 space-y-3">{reviews?.length === 0 && <p className={`text-sm ${t.subtext}`}>No reviews yet for this train and route.</p>}{reviews?.map((review) => <article key={review.review_id} className={`rounded-xl p-3 ${t.cardAltBg}`}><p className="text-amber-500" aria-label={`${review.rating} out of 5 stars`}>{String.fromCharCode(9733).repeat(review.rating)}{String.fromCharCode(9734).repeat(5 - review.rating)}</p><p className={`mt-1 text-sm ${t.text}`}>{review.comment}</p><p className={`mt-1 text-xs ${t.subtext}`}>{review.first_name} {review.last_name} · {fmtDate(review.created_at)}</p></article>)}{currentUser?.role === "customer" ? <form onSubmit={submit} className="space-y-2"><label className={`block text-xs font-medium ${t.subtext}`}>Your review (available after a confirmed booking)<select value={rating} onChange={(e) => setRating(e.target.value)} className={`ml-2 rounded border px-2 py-1 ${t.inputBg}`}>{[5,4,3,2,1].map((n) => <option key={n} value={n}>{n} stars</option>)}</select></label><textarea required maxLength="1000" rows="2" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Share your experience on this train and route" className={`w-full rounded-lg border px-3 py-2 text-sm ${t.inputBg}`} /><button disabled={saving} className="text-sm font-semibold text-brand disabled:opacity-50">{saving ? "Saving…" : "Submit review"}</button></form> : <p className={`text-xs ${t.subtext}`}>Sign in as a customer to leave a review after booking this train.</p>}<ErrorBanner message={error} /></div></details>;
+}
+
+function ResultsPage({ t, search, go, stations, currentUser }) {
   const [trips, setTrips] = useState(null);
   const [error, setError] = useState("");
   const from = stations.find((s) => s.station_code === search.from);
@@ -542,6 +615,14 @@ function ResultsPage({ t, search, go, stations }) {
     const mins = Math.max(0, Math.round((new Date(end) - new Date(start)) / 60000));
     return `${String(Math.floor(mins / 60)).padStart(2, "0")}h ${String(mins % 60).padStart(2, "0")}m`;
   };
+  const inWindow = (value, windowName) => {
+    if (!windowName) return true;
+    const hour = new Date(value).getHours();
+    if (windowName === "Morning") return hour >= 5 && hour < 12;
+    if (windowName === "Afternoon") return hour >= 12 && hour < 17;
+    return hour >= 17 || hour < 5;
+  };
+  const visibleTrips = trips;
 
   useEffect(() => {
     let cancelled = false;
@@ -556,7 +637,7 @@ function ResultsPage({ t, search, go, stations }) {
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <h1 className={`text-xl font-bold tracking-tight ${t.text}`}>{from?.city} → {to?.city}</h1>
+          <h1 className={`text-xl font-bold tracking-tight ${t.text}`}>{from?.city} â†’ {to?.city}</h1>
           <p className={`text-sm ${t.subtext}`}>{fmtDate(search.date)}{search.klass ? ` · ${search.klass}` : ""}</p>
         </div>
         <OutlineButton t={t} onClick={() => go("home")}>&larr; Modify Search</OutlineButton>
@@ -565,14 +646,14 @@ function ResultsPage({ t, search, go, stations }) {
       <ErrorBanner message={error} />
       {trips === null && !error && <p className={t.subtext}>Loading trains…</p>}
 
-      {trips && trips.length === 0 && (
+      {visibleTrips && visibleTrips.length === 0 && (
         <div className={`rounded-xl border p-8 text-center ${t.cardBg}`}>
-          <p className={t.text}>No trains are available for this journey.</p>
+          <p className={t.text}>{trips?.length ? "No trains match your preferred departure and arrival times." : "No trains are available for this journey."}</p>
         </div>
       )}
 
       <div className="space-y-4">
-        {trips && trips.map((trip) => (
+        {visibleTrips && visibleTrips.map((trip) => (
           <div key={trip.trip_id} className={`rounded-xl border p-5 ${t.cardBg}`}>
             <h2 className={`font-semibold tracking-tight ${t.text}`}>{trip.train_name} <span className={`font-normal text-sm ${t.subtext}`}>#{trip.train_id}</span></h2>
             <div className={`my-4 grid grid-cols-[1fr_auto] items-center border-y -mx-5 px-5 py-3 ${t.divider}`}>
@@ -598,12 +679,13 @@ function ResultsPage({ t, search, go, stations }) {
                     <p className={`text-sm font-bold ${c.available > 0 ? "text-brand" : "text-red-500"}`}>{c.available}</p>
                   </div>
                   <div className={`flex flex-wrap items-center justify-between gap-2 border-t pt-2 ${t.divider}`}>
-                    <span className={`text-sm font-semibold ${t.text}`}>৳{c.fare}</span>
+                    <span className={`text-sm font-semibold ${t.text}`}>à§³{c.fare}</span>
                     <PrimaryButton t={t} disabled={c.available === 0} onClick={() => go("coach", { tripId: trip.trip_id, klass: c.coach_type, fare: c.fare })}>Book Now</PrimaryButton>
                   </div>
                 </div>
               ))}
             </div>
+            <TrainReviews t={t} trip={trip} currentUser={currentUser} />
           </div>
         ))}
       </div>
@@ -653,7 +735,11 @@ function SeatsPage({ t, go, ctx }) {
 
   const toggle = (seat) => {
     if (seat.taken) return;
-    setSelected((sel) => (sel.includes(seat.seat_id) ? sel.filter((id) => id !== seat.seat_id) : [...sel, seat.seat_id]));
+    setSelected((sel) => {
+      if (sel.includes(seat.seat_id)) return sel.filter((id) => id !== seat.seat_id);
+      if (sel.length >= 5) return sel;
+      return [...sel, seat.seat_id];
+    });
   };
   const rows = [];
   for (let i = 0; i < seats.length; i += 4) rows.push(seats.slice(i, i + 4));
@@ -663,6 +749,7 @@ function SeatsPage({ t, go, ctx }) {
       <BackBar t={t} onBack={() => go("coach")} label="Back to coach selection" />
       <JourneySummary t={t} trainName={ctx.trainName} fromCity={ctx.search.fromCity} toCity={ctx.search.toCity} date={ctx.date} klass={ctx.klass} coachNumber={ctx.coach.coach_number} fare={ctx.fare} />
       <h2 className={`mt-6 mb-3 font-semibold ${t.text}`}>Select Seat(s) — Coach {ctx.coach.coach_number}</h2>
+      <p className={`mb-3 text-sm ${t.subtext}`}>Select up to 5 seats. {selected.length} of 5 selected.</p>
       <div className="flex gap-4 text-xs mb-4">
         <span className={`flex items-center gap-1.5 ${t.subtext}`}><span className="w-3 h-3 rounded-sm bg-neutral-300 inline-block" /> Available</span>
         <span className={`flex items-center gap-1.5 ${t.subtext}`}><span className="w-3 h-3 rounded-sm bg-brand inline-block" /> Selected</span>
@@ -678,7 +765,7 @@ function SeatsPage({ t, go, ctx }) {
                 : `${t.cardAltBg} ${t.text} hover:border-brand`;
               return (
                 <React.Fragment key={seat.seat_id}>
-                  <button disabled={seat.taken} onClick={() => toggle(seat)} className={`w-11 h-11 rounded-lg border text-xs font-semibold flex items-center justify-center transition-colors ${cls}`}>{seat.seat_number}</button>
+              <button disabled={seat.taken || (!isSel && selected.length >= 5)} onClick={() => toggle(seat)} className={`w-11 h-11 rounded-lg border text-xs font-semibold flex items-center justify-center transition-colors ${cls}`}>{seat.seat_number}</button>
                   {idx === 1 && <div className="w-4" />}
                 </React.Fragment>
               );
@@ -844,7 +931,7 @@ function PaymentPage({ t, go, ctx, stations }) {
           ))}
         </div>
         <div className={`flex justify-between mt-3 pt-3 border-t font-semibold ${t.divider} ${t.text}`}>
-          <span>Total</span><span>৳{booking.fare}</span>
+          <span>Total</span><span>à§³{booking.fare}</span>
         </div>
       </div>
 
@@ -860,7 +947,7 @@ function PaymentPage({ t, go, ctx, stations }) {
           Simulate a failed payment (for testing)
         </label>
         <ErrorBanner message={error} />
-        <PrimaryButton t={t} onClick={pay} disabled={loading || cancelling} className="w-full mt-4">{loading ? "Processing…" : `Pay ৳${booking.fare}`}</PrimaryButton>
+        <PrimaryButton t={t} onClick={pay} disabled={loading || cancelling} className="w-full mt-4">{loading ? "Processing…" : `Pay à§³${booking.fare}`}</PrimaryButton>
       </div>
     </div>
   );
@@ -869,16 +956,29 @@ function PaymentPage({ t, go, ctx, stations }) {
 function TicketPage({ t, go, ctx, stations }) {
   const { booking, tickets, payment } = ctx.booking;
   const first = tickets[0];
+  const [canceling, setCanceling] = useState(null);
+  const [cancelError, setCancelError] = useState("");
   const cityOf = (code) => stations.find((s) => s.station_code === code)?.city || code;
   const fromCity = cityOf(booking.starts_at_station);
   const toCity = cityOf(booking.ends_at_station);
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(booking.pnr_number)}`;
+  const cancelTicket = async (ticket) => {
+    if (!window.confirm(`Cancel ${ticket.passenger_name}'s ticket? Any paid fare will be recorded as a full simulated refund.`)) return;
+    setCanceling(ticket.ticket_id);
+    setCancelError("");
+    try {
+      await api(`/bookings/${encodeURIComponent(booking.pnr_number)}/tickets/${ticket.ticket_id}`, { method: "DELETE" });
+      const fresh = await api(`/bookings/${encodeURIComponent(booking.pnr_number)}`);
+      go("ticket", { booking: fresh, fromMyBookings: true });
+    } catch (e) { setCancelError(e.message); }
+    finally { setCanceling(null); }
+  };
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
       <div className="text-center mb-6">
         <p className="text-3xl">&#9989;</p>
-        <h1 className={`text-2xl font-bold tracking-tight ${t.text}`}>Booking Confirmed</h1>
+        <h1 className={`text-2xl font-bold tracking-tight ${t.text}`}>{tickets.some((tk) => tk.ticket_status === "active") ? "Booking Details" : "Booking Cancelled"}</h1>
       </div>
       <div className={`rounded-xl border p-6 ${t.cardBg}`}>
         <div className="flex justify-between items-start mb-4">
@@ -890,22 +990,26 @@ function TicketPage({ t, go, ctx, stations }) {
         </div>
         <div className={`grid grid-cols-2 gap-y-3 gap-x-4 text-sm border-t pt-4 ${t.divider}`}>
           <InfoRow t={t} label="Train" value={first.train_name} />
-          <InfoRow t={t} label="Route" value={`${fromCity} → ${toCity}`} />
+          <InfoRow t={t} label="Route" value={`${fromCity} â†’ ${toCity}`} />
           <InfoRow t={t} label="Journey Date" value={fmtDate(first.departure_date)} />
+          <InfoRow t={t} label="Starts" value={first.starts_at ? new Date(first.starts_at).toLocaleString() : "—"} />
+          <InfoRow t={t} label="Ends" value={first.ends_at ? new Date(first.ends_at).toLocaleString() : "—"} />
           <InfoRow t={t} label="Class" value={first.coach_type} />
           <InfoRow t={t} label="Coach" value={first.coach_number} />
           <InfoRow t={t} label="Seats" value={tickets.map((tk) => tk.seat_number).join(", ")} />
-          <InfoRow t={t} label="Fare" value={`৳${booking.fare}`} />
+          <InfoRow t={t} label="Fare" value={`à§³${booking.fare}`} />
           <InfoRow t={t} label="Payment" value={payment?.payment_method || "-"} />
         </div>
         <div className={`mt-4 pt-4 border-t ${t.divider}`}>
           <p className={`text-xs font-medium mb-2 ${t.subtext}`}>Passengers</p>
           {tickets.map((tk) => (
-            <div key={tk.ticket_id} className="flex justify-between text-sm py-1">
-              <span className={t.text}>{tk.passenger_name} ({tk.passenger_age}y)</span>
-              <span className={t.subtext}>Seat {tk.seat_number}</span>
+            <div key={tk.ticket_id} className="flex flex-wrap items-center justify-between gap-2 border-b py-2 last:border-0">
+              <span className={`${t.text} ${tk.ticket_status === "cancelled" ? "line-through opacity-60" : ""}`}>{tk.passenger_name} ({tk.passenger_age}y) · Seat {tk.seat_number} · {tk.ticket_status}</span>
+              {tk.ticket_status === "active" && booking.booking_status === "confirmed" && <button disabled={canceling === tk.ticket_id} onClick={() => cancelTicket(tk)} className="text-sm font-semibold text-red-600 disabled:opacity-50">{canceling === tk.ticket_id ? "Cancelling…" : "Cancel ticket"}</button>}
+              {tk.refund_amount && <span className="text-xs font-medium text-emerald-600">Refund à§³{tk.refund_amount} {tk.refund_status}</span>}
             </div>
           ))}
+          {cancelError && <ErrorBanner message={cancelError} />}
         </div>
       </div>
       <div className="flex flex-wrap gap-3 mt-5 justify-center">
@@ -917,7 +1021,7 @@ function TicketPage({ t, go, ctx, stations }) {
   );
 }
 
-function MyBookingsPage({ t, go }) {
+function MyBookingsPage({ t, go, stations }) {
   const [list, setList] = useState(null);
   const [error, setError] = useState("");
 
@@ -926,7 +1030,7 @@ function MyBookingsPage({ t, go }) {
   const openBooking = async (b) => {
     try {
       const full = await api(`/bookings/${b.pnr_number}`);
-      go(full.booking.effective_status === "confirmed" ? "ticket" : "payment", { booking: full, fromMyBookings: true });
+      go(["confirmed", "cancelled"].includes(full.booking.effective_status) ? "ticket" : "payment", { booking: full, fromMyBookings: true });
     } catch (e) {
       alert(e.message);
     }
@@ -940,11 +1044,16 @@ function MyBookingsPage({ t, go }) {
 
   const Row = ({ b }) => {
     const tone = b.effective_status === "confirmed" ? "success" : b.effective_status === "pending" ? "warn" : "danger";
+    const stationLabel = (code) => {
+      const station = stations.find((item) => item.station_code === code);
+      return station ? `${station.station_name} (${station.station_code})` : code;
+    };
     return (
       <button onClick={() => openBooking(b)} className={`w-full text-left rounded-xl border p-4 flex items-center justify-between transition-colors ${t.cardBg} hover:border-brand`}>
         <div>
-          <p className={`font-medium ${t.text}`}>{b.starts_at_station} → {b.ends_at_station}</p>
-          <p className={`text-xs ${t.subtext}`}>PNR {b.pnr_number} · ৳{b.fare} · {fmtDate(b.booking_date)}</p>
+          <p className={`font-medium ${t.text}`}>{stationLabel(b.starts_at_station)} <span aria-hidden="true">&#8594;</span> {stationLabel(b.ends_at_station)}</p>
+          <p className={`text-xs ${t.subtext}`}>PNR {b.pnr_number} · à§³{b.fare} · {fmtDate(b.booking_date)}</p>
+          <p className={`mt-1 text-xs ${t.subtext}`}>{b.train_name || "Train"} · Starts {b.starts_at ? new Date(b.starts_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—"} · Ends {b.ends_at ? new Date(b.ends_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—"}</p>
         </div>
         <Badge t={t} tone={tone}>{b.effective_status[0].toUpperCase() + b.effective_status.slice(1)}</Badge>
       </button>
@@ -974,25 +1083,31 @@ function AdminPage({ t, currentUser }) {
   const [bookings, setBookings] = useState(null);
   const [tickets, setTickets] = useState(null);
   const [contacts, setContacts] = useState(null);
+  const [bookingOptions, setBookingOptions] = useState(null);
+  const [availableCustomSeats, setAvailableCustomSeats] = useState([]);
   const [ticketFilter, setTicketFilter] = useState("");
   const [editingTicket, setEditingTicket] = useState(null);
   const [ticketEdit, setTicketEdit] = useState({ passenger_name: "", passenger_age: "" });
   const [error, setError] = useState("");
   const [ticketError, setTicketError] = useState("");
   const [saving, setSaving] = useState("");
+  const [lastStatsUpdate, setLastStatsUpdate] = useState(null);
   const [newUser, setNewUser] = useState({ first_name: "", last_name: "", email: "", password: "", role: "customer" });
+  const [customBooking, setCustomBooking] = useState({ user_id: "", trip_id: "", coach_id: "", seat_id: "", from: "", to: "", passenger_name: "", passenger_age: "", fare: "", status: "confirmed", payment_method: "Card" });
 
   const load = async () => {
     setError("");
     try {
-      const [nextSummary, nextUsers, nextBookings, nextContacts] = await Promise.all([
-        api("/admin/summary"), api("/admin/users"), api("/admin/records"), api("/admin/contacts"),
+      const [nextSummary, nextUsers, nextBookings, nextContacts, nextOptions] = await Promise.all([
+        api("/admin/summary"), api("/admin/users"), api("/admin/records"), api("/admin/contacts"), api("/admin/booking-options"),
       ]);
       setSummary(nextSummary);
       setUsers(nextUsers);
       setBookings(nextBookings);
       setTickets(nextBookings);
       setContacts(nextContacts);
+      setBookingOptions(nextOptions);
+      setLastStatsUpdate(new Date());
     } catch (e) { setError(e.message); }
   };
 
@@ -1021,6 +1136,17 @@ function AdminPage({ t, currentUser }) {
   };
 
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (!customBooking.trip_id || !customBooking.coach_id) { setAvailableCustomSeats([]); return; }
+    api(`/admin/booking-options/seats?trip_id=${customBooking.trip_id}&coach_id=${customBooking.coach_id}`)
+      .then(setAvailableCustomSeats).catch(() => setAvailableCustomSeats([]));
+  }, [customBooking.trip_id, customBooking.coach_id]);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      api("/admin/summary").then((next) => { setSummary(next); setLastStatsUpdate(new Date()); }).catch((e) => setError(e.message));
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const changeRole = async (user, role) => {
     setSaving(`role-${user.user_id}`);
@@ -1043,6 +1169,14 @@ function AdminPage({ t, currentUser }) {
     finally { setSaving(""); }
   };
 
+  const deleteContact = async (contactId) => {
+    if (!window.confirm("Delete this contact message permanently?")) return;
+    setSaving(`contact-${contactId}`);
+    try { await api(`/admin/contacts/${contactId}`, { method: "DELETE" }); await load(); }
+    catch (e) { setError(e.message); }
+    finally { setSaving(""); }
+  };
+
   const createUser = async (event) => {
     event.preventDefault();
     setSaving("create-user");
@@ -1055,9 +1189,21 @@ function AdminPage({ t, currentUser }) {
     finally { setSaving(""); }
   };
 
+  const createCustomBooking = async (event) => {
+    event.preventDefault(); setSaving("custom-booking"); setError("");
+    try {
+      const result = await api("/admin/bookings/custom", { method: "POST", body: { ...customBooking, user_id: Number(customBooking.user_id), trip_id: Number(customBooking.trip_id), coach_id: Number(customBooking.coach_id), seat_id: Number(customBooking.seat_id), passenger_age: Number(customBooking.passenger_age), fare: Number(customBooking.fare) } });
+      window.alert(`Booking ${result.pnr_number} created.`);
+      setCustomBooking((v) => ({ ...v, trip_id: "", coach_id: "", seat_id: "", passenger_name: "", passenger_age: "", fare: "" }));
+      await load();
+    } catch (e) { setError(e.message); }
+    finally { setSaving(""); }
+  };
+
   if (error) return <div className="max-w-4xl mx-auto px-4 py-8"><ErrorBanner message={error} /></div>;
   if (!summary || !users || !bookings || !contacts) return <div className="max-w-4xl mx-auto px-4 py-8"><p className={t.subtext}>Loading admin dashboard…</p></div>;
 
+  if (!bookingOptions) return <div className="max-w-4xl mx-auto px-4 py-8"><p className={t.subtext}>Loading booking options…</p></div>;
   const cards = [
     ["Customers", summary.users.customers],
     ["Administrators", summary.users.admins],
@@ -1065,10 +1211,14 @@ function AdminPage({ t, currentUser }) {
     ["Confirmed bookings", summary.bookings.confirmed],
     ["Active payment holds", summary.bookings.pending],
   ];
+  const selectedTrip = bookingOptions.trips.find((trip) => String(trip.trip_id) === customBooking.trip_id);
+  const matchingCoaches = bookingOptions.coaches.filter((coach) => selectedTrip && coach.train_id === selectedTrip.train_id);
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       <h1 className={`text-2xl font-bold tracking-tight ${t.text}`}>Admin Dashboard</h1>
       <p className={`mt-1 text-sm ${t.subtext}`}>This area is available only to accounts with administrator privileges.</p>
+      <p className={`mt-1 text-xs ${t.subtext}`}>Statistics refresh every 15 seconds{lastStatsUpdate ? ` · Updated ${lastStatsUpdate.toLocaleTimeString()}` : ""}</p>
+      <div className="mt-3 flex justify-end"><OutlineButton t={t} onClick={load}>Refresh dashboard</OutlineButton></div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
         {cards.map(([label, value]) => (
           <div key={label} className={`rounded-xl border p-5 ${t.cardBg}`}>
@@ -1089,6 +1239,24 @@ function AdminPage({ t, currentUser }) {
             <Field label="Role" t={t}><select value={newUser.role} onChange={(e) => setNewUser((u) => ({ ...u, role: e.target.value }))} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`}><option value="customer">Customer</option><option value="admin">Administrator</option></select></Field>
             <PrimaryButton t={t} type="submit" disabled={saving === "create-user"}>{saving === "create-user" ? "Creating…" : "Create"}</PrimaryButton>
           </div>
+        </form>
+      </section>
+
+      <section className={`mt-8 rounded-xl border overflow-hidden ${t.cardBg}`}>
+        <div className={`p-5 border-b ${t.divider}`}><h2 className={`font-semibold ${t.text}`}>Create Custom Booking</h2><p className={`mt-1 text-sm ${t.subtext}`}>Create a one passenger booking for a customer. Fare, journey, passenger, seat and status are editable.</p></div>
+        <form onSubmit={createCustomBooking} className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-3">
+          <Field label="Customer" t={t}><select required value={customBooking.user_id} onChange={(e) => setCustomBooking((v) => ({ ...v, user_id: e.target.value }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`}><option value="">Choose customer</option>{bookingOptions.customers.map((u) => <option key={u.user_id} value={u.user_id}>{u.first_name} {u.last_name} · {u.email}</option>)}</select></Field>
+          <Field label="Train and date" t={t}><select required value={customBooking.trip_id} onChange={(e) => setCustomBooking((v) => ({ ...v, trip_id: e.target.value, coach_id: "", seat_id: "" }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`}><option value="">Choose train</option>{bookingOptions.trips.map((trip) => <option key={trip.trip_id} value={trip.trip_id}>{trip.train_name} · {fmtDate(trip.departure_date)}</option>)}</select></Field>
+          <Field label="Coach" t={t}><select required disabled={!selectedTrip} value={customBooking.coach_id} onChange={(e) => setCustomBooking((v) => ({ ...v, coach_id: e.target.value, seat_id: "" }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`}><option value="">Choose coach</option>{matchingCoaches.map((c) => <option key={c.coach_id} value={c.coach_id}>Coach {c.coach_number} · {c.coach_type}</option>)}</select></Field>
+          <Field label="Seat" t={t}><select required disabled={!customBooking.coach_id} value={customBooking.seat_id} onChange={(e) => setCustomBooking((v) => ({ ...v, seat_id: e.target.value }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`}><option value="">Choose available seat</option>{availableCustomSeats.map((s) => <option key={s.seat_id} value={s.seat_id}>{s.seat_number}</option>)}</select></Field>
+          <Field label="From" t={t}><select required value={customBooking.from} onChange={(e) => setCustomBooking((v) => ({ ...v, from: e.target.value }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`}><option value="">Choose station</option>{bookingOptions.stations.map((s) => <option key={s.station_code} value={s.station_code}>{s.city} ({s.station_code})</option>)}</select></Field>
+          <Field label="To" t={t}><select required value={customBooking.to} onChange={(e) => setCustomBooking((v) => ({ ...v, to: e.target.value }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`}><option value="">Choose station</option>{bookingOptions.stations.map((s) => <option key={s.station_code} value={s.station_code}>{s.city} ({s.station_code})</option>)}</select></Field>
+          <Field label="Passenger name" t={t}><input required maxLength="100" value={customBooking.passenger_name} onChange={(e) => setCustomBooking((v) => ({ ...v, passenger_name: e.target.value }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`} /></Field>
+          <Field label="Passenger age" t={t}><input required type="number" min="1" max="120" value={customBooking.passenger_age} onChange={(e) => setCustomBooking((v) => ({ ...v, passenger_age: e.target.value }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`} /></Field>
+          <Field label="Fare (à§³)" t={t}><input required type="number" min="0" step="0.01" value={customBooking.fare} onChange={(e) => setCustomBooking((v) => ({ ...v, fare: e.target.value }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`} /></Field>
+          <Field label="Booking status" t={t}><select value={customBooking.status} onChange={(e) => setCustomBooking((v) => ({ ...v, status: e.target.value }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`}><option value="confirmed">Confirmed</option><option value="pending">Pending payment</option></select></Field>
+          {customBooking.status === "confirmed" && <Field label="Payment method" t={t}><select value={customBooking.payment_method} onChange={(e) => setCustomBooking((v) => ({ ...v, payment_method: e.target.value }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`}><option>Card</option><option>bKash</option><option>Nagad</option></select></Field>}
+          <div className="flex items-end"><PrimaryButton t={t} type="submit" disabled={saving === "custom-booking"}>{saving === "custom-booking" ? "Creating…" : "Create booking"}</PrimaryButton></div>
         </form>
       </section>
 
@@ -1156,11 +1324,11 @@ function AdminPage({ t, currentUser }) {
                         ) : (
                           tk.ticket_id ? <>
                             <p className={`font-medium ${t.text}`}>{tk.passenger_name}, {tk.passenger_age}y</p>
-                            <p className={t.subtext}>Booking fare ৳{tk.fare}</p>
+                            <p className={t.subtext}>Booking fare à§³{tk.fare}</p>
                           </> : <span className={t.subtext}>No passenger ticket</span>
                         )}
                       </td>
-                      <td className={`p-3 ${t.subtext}`}>{tk.starts_at_station} → {tk.ends_at_station}<br />{tk.train_name || "—"}{tk.departure_date ? ` · ${fmtDate(tk.departure_date)}` : ""}</td>
+                      <td className={`p-3 ${t.subtext}`}>{tk.starts_at_station} â†’ {tk.ends_at_station}<br />{tk.train_name || "—"}{tk.departure_date ? ` · ${fmtDate(tk.departure_date)}` : ""}</td>
                       <td className={`p-3 ${t.subtext}`}>{tk.seat_number ? <>Coach {tk.coach_number} · {tk.seat_number}<br />{tk.coach_type}</> : "—"}</td>
                       <td className="p-3"><Badge t={t} tone={tk.booking_status === "confirmed" ? "success" : tk.booking_status === "pending" ? "warn" : "danger"}>{tk.booking_status}</Badge></td>
                       <td className="p-3">
@@ -1192,6 +1360,7 @@ function AdminPage({ t, currentUser }) {
           {contacts.map((message) => <article key={message.contact_id} className="p-5">
             <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className={`font-semibold ${t.text}`}>{message.subject}</h3><p className={`mt-1 text-sm ${t.subtext}`}>{message.name} · <a className="text-brand hover:underline" href={`mailto:${message.email}`}>{message.email}</a></p></div><time className={`text-xs ${t.subtext}`}>{fmtDate(message.submitted_at)}</time></div>
             <p className={`mt-3 whitespace-pre-wrap text-sm ${t.text}`}>{message.message}</p>
+            <div className="mt-3 flex justify-end"><button disabled={saving === `contact-${message.contact_id}`} onClick={() => deleteContact(message.contact_id)} className="text-sm font-semibold text-red-600 disabled:opacity-50">{saving === `contact-${message.contact_id}` ? "Deleting…" : "Delete message"}</button></div>
           </article>)}
         </div>
       </section>
@@ -1211,7 +1380,7 @@ function ClassInfoPage({ t }) {
           <div key={c.coach_type} className={`rounded-xl border p-5 ${t.cardBg}`}>
             <div className="flex items-center justify-between mb-3">
               <h2 className={`font-semibold ${t.text}`}>{c.coach_type}</h2>
-              <span className="text-sm font-semibold text-brand">৳{c.fare ?? "—"}</span>
+              <span className="text-sm font-semibold text-brand">à§³{c.fare ?? "—"}</span>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <InfoRow t={t} label="Seat Type" value={c.seatType} />
@@ -1243,6 +1412,22 @@ function AboutPage({ t }) {
       <div className={`mt-8 rounded-lg border p-4 text-sm ${t.cardAltBg} ${t.text}`}>RailX BD is a demonstration/prototype platform and is not an official Bangladesh Railway website.</div>
     </div>
   );
+}
+
+function VerifyTicketPage({ t }) {
+  const [form, setForm] = useState({ pnr: "", email: "" });
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const submit = async (event) => {
+    event.preventDefault(); setLoading(true); setError(""); setResult(null);
+    try {
+      const query = new URLSearchParams(form);
+      setResult(await api(`/bookings/verify?${query.toString()}`));
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  };
+  return <div className="mx-auto max-w-xl px-4 py-12"><p className="text-xs font-bold uppercase tracking-[.2em] text-brand">Travel with confidence</p><h1 className={`mt-2 text-3xl font-bold ${t.text}`}>Verify your ticket</h1><p className={`mt-2 text-sm ${t.subtext}`}>Enter the booking reference and the email used at checkout.</p><form onSubmit={submit} className={`mt-6 space-y-4 rounded-2xl border p-5 ${t.cardBg}`}><Field t={t} label="PNR"><input required autoCapitalize="characters" maxLength="10" value={form.pnr} onChange={(e) => setForm((v) => ({ ...v, pnr: e.target.value.toUpperCase() }))} className={`w-full rounded-lg border px-3 py-3 ${t.inputBg}`} placeholder="PNR1234567" /></Field><Field t={t} label="Booking email"><input required type="email" value={form.email} onChange={(e) => setForm((v) => ({ ...v, email: e.target.value }))} className={`w-full rounded-lg border px-3 py-3 ${t.inputBg}`} /></Field><ErrorBanner message={error} /><PrimaryButton t={t} type="submit" disabled={loading}>{loading ? "Checking…" : "Verify ticket"}</PrimaryButton></form>{result && <section className={`mt-5 rounded-2xl border p-5 ${t.cardBg}`}><div className="flex items-center justify-between"><h2 className={`font-bold ${t.text}`}>{result.train_name}</h2><Badge t={t} tone={result.booking_status === "confirmed" ? "success" : "danger"}>{result.booking_status}</Badge></div><p className={`mt-2 ${t.text}`}>{result.starts_at_station} â†’ {result.ends_at_station}</p><p className={`mt-1 text-sm ${t.subtext}`}>Starts {new Date(result.starts_at).toLocaleString()} · Ends {new Date(result.ends_at).toLocaleString()}</p><p className={`mt-2 text-xs ${t.subtext}`}>PNR {result.pnr_number} · {result.tickets.length} passenger(s)</p>{result.tickets.map((ticket, i) => <p key={i} className={`mt-2 text-sm ${t.text}`}>{ticket.passenger_name} · Seat {ticket.coach_number}-{ticket.seat_number} ({ticket.coach_type})</p>)}</section>}</div>;
 }
 
 function ContactPage({ t, currentUser }) {
@@ -1328,6 +1513,12 @@ function App() {
       else window.history.pushState({}, "", path);
     }
     window.scrollTo(0, 0);
+  };
+
+  const goAnchor = (id) => {
+    const scroll = () => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (page !== "home") { go("home"); window.setTimeout(scroll, 120); }
+    else scroll();
   };
 
   // Support the browser's Back/Forward buttons.
@@ -1437,11 +1628,11 @@ function App() {
   if (!authChecked) {
     body = <div className="max-w-4xl mx-auto px-4 py-16 text-center text-sm text-neutral-400">Loading…</div>;
   } else if (page === "home") {
-    body = <HomePage t={t} search={search} setSearch={setSearch} doSearch={doSearch} searchError={searchError} stations={stations} classTypes={classTypes} />;
+    body = <HomePage t={t} search={search} setSearch={setSearch} doSearch={doSearch} searchError={searchError} stations={stations} classTypes={classTypes} go={go} onAnchor={goAnchor} />;
   } else if (page === "login") {
     body = <LoginPage t={t} pendingSearch={pendingSearch} onLogin={onLogin} stations={stations} />;
   } else if (page === "results") {
-    body = <ResultsPage t={t} search={search} go={goBooking} stations={stations} />;
+    body = <ResultsPage t={t} search={search} go={goBooking} stations={stations} currentUser={currentUser} />;
   } else if (page === "coach" && ctx.tripId) {
     body = <CoachPage t={t} go={goBooking} ctx={ctx} />;
   } else if (page === "seats" && ctx.coach) {
@@ -1453,7 +1644,11 @@ function App() {
   } else if (page === "ticket" && ctx.booking) {
     body = <TicketPage t={t} go={goBooking} ctx={ctx} stations={stations} />;
   } else if (page === "mybookings" && currentUser) {
-    body = <MyBookingsPage t={t} go={goBooking} />;
+    body = <MyBookingsPage t={t} go={goBooking} stations={stations} />;
+  } else if (page === "routes") {
+    body = <RouteDirectory t={t} onPick={(from, to) => { setSearch((s) => ({ ...s, from, to })); go("home"); window.setTimeout(() => document.getElementById("search-card")?.scrollIntoView({ behavior: "smooth", block: "center" }), 120); }} />;
+  } else if (page === "stations") {
+    body = <StationGuide t={t} stations={stations} onPick={(code) => { setSearch((s) => ({ ...s, from: code, to: s.to === code ? "CTG" : s.to })); go("home"); window.setTimeout(() => document.getElementById("search-card")?.scrollIntoView({ behavior: "smooth", block: "center" }), 120); }} />;
   } else if (page === "admin" && currentUser?.role === "admin") {
     body = <AdminPage t={t} currentUser={currentUser} />;
   } else if (page === "classinfo") {
@@ -1462,6 +1657,8 @@ function App() {
     body = <AboutPage t={t} />;
   } else if (page === "contact" && currentUser?.role === "customer") {
     body = <ContactPage t={t} currentUser={currentUser} />;
+  } else if (page === "verify") {
+    body = <VerifyTicketPage t={t} />;
   } else if (page === "account" && currentUser) {
     body = (
       <div className="max-w-md mx-auto px-4 py-10">
@@ -1486,7 +1683,7 @@ function App() {
 
   return (
     <div className={`min-h-screen ${t.pageBg}`}>
-      <NavBar page={page} go={(p) => { if (p === "home") setCtx({}); go(p); }} t={t} setTheme={setTheme} currentUser={currentUser} logout={logout} />
+      <NavBar page={page} go={(p) => { if (p === "home") setCtx({}); go(p); }} onAnchor={goAnchor} t={t} setTheme={setTheme} currentUser={currentUser} logout={logout} />
       {body}
       <footer className={`border-t mt-10 py-6 text-center text-xs ${t.divider} ${t.subtext}`}>
         RailX BD — demonstration/prototype platform, not an official Bangladesh Railway website.
