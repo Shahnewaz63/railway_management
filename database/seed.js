@@ -87,7 +87,7 @@ async function run() {
 
     console.log("Clearing existing data...");
     await client.query(
-      `TRUNCATE payment, ticket, booking, user_auth, users, seat, coach, trip, route_station, train, route, station RESTART IDENTITY CASCADE`
+      `TRUNCATE contact_message, payment, ticket, booking, user_auth, users, seat, coach, trip, route_station, train, route, station RESTART IDENTITY CASCADE`
     );
 
     console.log("Seeding stations...");

@@ -32,6 +32,8 @@ public/
 For an existing database, apply train stop times with `npm run migrate:train-schedule`
 followed by `npm run migrate:seed-train-times`. New databases get the schedule table
 from `database/schema.sql`; `database/seed.js` fills each seeded train's stop times.
+Contact form storage can be added to an existing database with
+`npm run migrate:contact-messages`.
 
 ## 1. Clone and install
 

@@ -126,6 +126,17 @@ CREATE TABLE payment (
   UNIQUE (pnr_number)
 );
 
+CREATE TABLE contact_message (
+  contact_id    SERIAL PRIMARY KEY,
+  user_id       INT REFERENCES users(user_id) ON DELETE SET NULL,
+  name          VARCHAR(100) NOT NULL,
+  email         VARCHAR(254) NOT NULL,
+  subject       VARCHAR(150) NOT NULL,
+  message       TEXT NOT NULL,
+  submitted_at  TIMESTAMP(6) NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_contact_message_date ON contact_message (submitted_at DESC);
+
 -- Indexes that the booking/search queries lean on.
 CREATE INDEX idx_ticket_trip_seat  ON ticket (trip_id, seat_id);
 CREATE INDEX idx_trip_train_date   ON trip (train_id, departure_date);

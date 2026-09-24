@@ -13,6 +13,8 @@
     "migrate:constraints": "node database/run-sql.js database/migrations/003_add_domain_constraints.sql",
     "migrate:train-schedule": "node database/run-sql.js database/migrations/004_add_train_station_schedule.sql",
     "migrate:seed-train-times": "node database/run-sql.js database/migrations/005_set_seed_train_times.sql",
+    "migrate:contact-messages": "node database/run-sql.js database/migrations/006_add_contact_messages.sql",
+    "migrate:contact-users": "node database/run-sql.js database/migrations/007_link_contact_messages_to_users.sql",
     "seed": "node database/seed.js"
   },
   "dependencies": {

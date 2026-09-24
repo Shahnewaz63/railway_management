@@ -76,9 +76,10 @@ function pageFromLocation() {
 }
 
 // Pages that require *some* signed-in user.
-const AUTH_ONLY_PAGES = new Set(["mybookings", "admin", "account"]);
+const AUTH_ONLY_PAGES = new Set(["mybookings", "admin", "account", "contact"]);
 // Pages that additionally require the administrator role.
 const ADMIN_ONLY_PAGES = new Set(["admin"]);
+const CUSTOMER_ONLY_PAGES = new Set(["contact"]);
 // Pages that only make sense with in-memory booking context (trip/coach/seat
 // selection). These can't be meaningfully deep-linked from a cold URL, so a
 // direct visit sends the visitor back to the flow's start instead of
@@ -91,21 +92,21 @@ function useTheme() {
   const [theme, setTheme] = useState(localStorage.getItem("bdr_theme") || "light");
   useEffect(() => localStorage.setItem("bdr_theme", theme), [theme]);
   const dark = theme === "dark";
-  // A single, restrained accent (emerald) over a neutral gray scale — the
-  // same pairing carries through both light and dark mode instead of
-  // swapping palettes, which keeps the UI feeling calm and minimal.
+  // A single, restrained railway-green accent ("brand", defined once in
+  // index.html's tailwind.config) over a neutral gray scale carries through
+  // both light and dark mode — one consistent design language, not two.
   const t = {
     dark,
-    pageBg: dark ? "bg-neutral-950" : "bg-neutral-50",
+    pageBg: dark ? "bg-neutral-950" : "bg-[#FAFAF9]",
     text: dark ? "text-neutral-100" : "text-neutral-900",
     subtext: dark ? "text-neutral-400" : "text-neutral-500",
     navBg: dark ? "bg-neutral-950/95 border-neutral-800" : "bg-white/95 border-neutral-200",
     cardBg: dark ? "bg-neutral-900 border-neutral-800" : "bg-white border-neutral-200",
-    cardAltBg: dark ? "bg-neutral-800/60 border-neutral-700" : "bg-neutral-100 border-neutral-200",
-    inputBg: dark ? "bg-neutral-800 border-neutral-700 text-neutral-100" : "bg-white border-neutral-300 text-neutral-900",
-    hero: dark ? "bg-neutral-900" : "bg-neutral-900",
-    primary: "bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm",
-    primaryOutline: dark ? "border border-neutral-700 hover:bg-neutral-800 text-neutral-100" : "border border-neutral-300 hover:border-emerald-400 hover:bg-emerald-50 text-neutral-900",
+    cardAltBg: dark ? "bg-neutral-800/60 border-neutral-700" : "bg-neutral-50 border-neutral-200",
+    inputBg: dark ? "bg-neutral-900 border-neutral-700 text-neutral-100" : "bg-white border-neutral-300 text-neutral-900",
+    hero: "bg-brand-dark",
+    primary: "bg-brand hover:bg-brand-hover text-white",
+    primaryOutline: dark ? "border border-neutral-700 hover:border-brand hover:bg-neutral-800 text-neutral-100" : "border border-neutral-300 hover:border-brand hover:bg-neutral-50 text-neutral-900",
     divider: dark ? "border-neutral-800" : "border-neutral-200",
   };
   return { theme, setTheme, t };
@@ -116,23 +117,23 @@ function useTheme() {
 function Badge({ children, tone = "default", t }) {
   const tones = {
     default: t.dark ? "bg-neutral-800 text-neutral-300" : "bg-neutral-100 text-neutral-600",
-    success: "bg-green-100 text-green-700",
-    warn: "bg-orange-100 text-orange-700",
-    danger: "bg-red-100 text-red-700",
+    success: "bg-green-50 text-green-700 border border-green-200",
+    warn: "bg-amber-50 text-amber-700 border border-amber-200",
+    danger: "bg-red-50 text-red-700 border border-red-200",
   };
-  return <span className={`px-2 py-0.5 rounded text-xs font-medium ${tones[tone]}`}>{children}</span>;
+  return <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${tones[tone]}`}>{children}</span>;
 }
 function PrimaryButton({ children, onClick, disabled, className = "", t, type = "button" }) {
   return (
     <button type={type} onClick={onClick} disabled={disabled}
-      className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed ${t.primary} ${className}`}>
+      className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed ${t.primary} ${className}`}>
       {children}
     </button>
   );
 }
 function OutlineButton({ children, onClick, className = "", t, type = "button" }) {
   return (
-    <button type={type} onClick={onClick} className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all ${t.primaryOutline} ${className}`}>
+    <button type={type} onClick={onClick} className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${t.primaryOutline} ${className}`}>
       {children}
     </button>
   );
@@ -147,7 +148,7 @@ function Field({ label, children, t }) {
 }
 function ErrorBanner({ message }) {
   if (!message) return null;
-  return <p role="alert" className="mt-3 text-sm text-red-500 flex items-center gap-1.5">&#9888; {message}</p>;
+  return <p role="alert" className="mt-3 text-sm text-red-600 flex items-center gap-1.5">&#9888; {message}</p>;
 }
 function InfoRow({ t, label, value }) {
   return (
@@ -159,7 +160,7 @@ function InfoRow({ t, label, value }) {
 }
 function BackBar({ t, onBack, label, disabled = false }) {
   return (
-    <button disabled={disabled} onClick={onBack} className={`mb-4 text-sm flex items-center gap-1.5 disabled:opacity-50 ${t.subtext} hover:text-emerald-600`}>
+    <button disabled={disabled} onClick={onBack} className={`mb-4 text-sm font-medium flex items-center gap-1.5 disabled:opacity-50 ${t.subtext} hover:text-brand transition-colors`}>
       &larr; {label}
     </button>
   );
@@ -188,18 +189,18 @@ function StationSelect({ value, onChange, t, stations, excludeCode, label }) {
   return (
     <div className="relative" ref={ref}>
       <button type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)}
-        className={`w-full px-3.5 py-3 rounded-xl border text-left flex items-center gap-3 ${t.inputBg} hover:border-emerald-400`}>
-        <span className="text-lg">{label === "From" ? "↗" : "↘"}</span>
+        className={`w-full px-3.5 py-3 rounded-lg border text-left flex items-center gap-3 transition-colors ${t.inputBg} hover:border-brand`}>
+        <span className="text-lg text-brand">{label === "From" ? "↗" : "↘"}</span>
         <span className="flex-1 min-w-0">
-          <span className={`block text-[11px] uppercase tracking-[.16em] ${t.subtext}`}>{label || "Station"}</span>
+          <span className={`block text-[11px] uppercase tracking-[.14em] font-semibold ${t.subtext}`}>{label || "Station"}</span>
           <span className={`block truncate text-sm font-semibold ${selected ? t.text : t.subtext}`}>{selected ? `${selected.station_name} · ${selected.city}` : "Choose a station"}</span>
         </span>
         <span className={`text-xs ${t.subtext}`}>⌄</span>
       </button>
       {open && (
-        <div role="listbox" className={`station-menu absolute left-0 right-0 z-40 mt-2 rounded-2xl border shadow-2xl overflow-hidden ${t.cardBg}`}>
+        <div role="listbox" className={`station-menu absolute left-0 right-0 z-40 mt-2 rounded-lg border shadow-lg overflow-hidden ${t.cardBg}`}>
           <div className={`p-2 border-b ${t.divider}`}>
-            <div className={`flex items-center gap-2 px-3 rounded-xl border ${t.cardAltBg}`}>
+            <div className={`flex items-center gap-2 px-3 rounded-lg border ${t.cardAltBg}`}>
               <span className={t.subtext}>⌕</span>
               <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search station or city…"
                 className={`w-full bg-transparent py-2.5 text-sm outline-none ${t.text}`} />
@@ -209,9 +210,9 @@ function StationSelect({ value, onChange, t, stations, excludeCode, label }) {
             {options.length === 0 && <p className={`px-3 py-4 text-sm ${t.subtext}`}>No matching stations found.</p>}
             {options.map((s) => (
               <button key={s.station_code} type="button" role="option" aria-selected={value === s.station_code} onClick={() => choose(s)}
-                className={`w-full px-3 py-2.5 rounded-xl text-left flex items-center justify-between hover:bg-emerald-500/10 ${value === s.station_code ? "bg-emerald-500/10" : ""}`}>
+                className={`w-full px-3 py-2.5 rounded-lg text-left flex items-center justify-between hover:bg-brand/10 ${value === s.station_code ? "bg-brand/10" : ""}`}>
                 <span><span className={`block text-sm font-semibold ${t.text}`}>{s.station_name}</span><span className={`block text-xs ${t.subtext}`}>{s.city}</span></span>
-                <span className="text-[10px] font-bold tracking-wider text-emerald-600">{s.station_code}</span>
+                <span className="text-[10px] font-bold tracking-wider text-brand">{s.station_code}</span>
               </button>
             ))}
           </div>
@@ -222,13 +223,32 @@ function StationSelect({ value, onChange, t, stations, excludeCode, label }) {
 }
 function JourneySummary({ t, trainName, fromCity, toCity, date, klass, coachNumber, fare }) {
   return (
-    <div className={`rounded-xl border p-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm ${t.cardAltBg}`}>
+    <div className={`rounded-lg border p-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm ${t.cardAltBg}`}>
       <div><p className={t.subtext}>Train</p><p className={`font-medium ${t.text}`}>{trainName}</p></div>
       <div><p className={t.subtext}>Route</p><p className={`font-medium ${t.text}`}>{fromCity} → {toCity}</p></div>
       <div><p className={t.subtext}>Date</p><p className={`font-medium ${t.text}`}>{fmtDate(date)}</p></div>
       <div><p className={t.subtext}>Class</p><p className={`font-medium ${t.text}`}>{klass}{coachNumber != null ? ` · Coach ${coachNumber}` : ""}</p></div>
       {fare != null && <div><p className={t.subtext}>Fare / seat</p><p className={`font-medium ${t.text}`}>৳{fare}</p></div>}
     </div>
+  );
+}
+
+/* ============================== Brand mark ============================== */
+
+// A simple geometric wordmark: two crossing rail lines (the "X" in RailX)
+// resting on a track line, in a single rounded badge. Deliberately plain —
+// one mark, one color, reused everywhere the brand appears.
+function BrandMark({ t }) {
+  return (
+    <span className="flex items-center gap-2.5">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand text-white">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M5 18L10.5 6M19 18L13.5 6" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" />
+          <path d="M3 20.5h18" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" />
+        </svg>
+      </span>
+      <span className={`text-[17px] font-bold tracking-tight ${t.text}`}>RailX <span className="text-brand">BD</span></span>
+    </span>
   );
 }
 
@@ -243,39 +263,40 @@ function NavBar({ page, go, t, setTheme, currentUser, logout, logoutPending }) {
     { key: "about", label: "About Us" },
     { key: "contact", label: "Contact" },
   ];
+  const visibleLinks = links.filter((link) => link.key !== "contact" || currentUser?.role === "customer");
   return (
-    <header className={`sticky top-0 z-30 border-b ${t.navBg}`}>
+    <header className={`sticky top-0 z-30 border-b backdrop-blur ${t.navBg}`}>
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-        <button className="flex items-center gap-2 font-semibold" onClick={() => go("home")}>
-          <div className="w-8 h-8 rounded-md bg-neutral-900 dark:bg-emerald-600 flex items-center justify-center text-white text-sm">&#128646;</div>
-          <span className={t.text}>BD Railway</span>
+        <button onClick={() => go("home")} aria-label="RailX BD home">
+          <BrandMark t={t} />
         </button>
 
-        <nav className="hidden md:flex items-center gap-6">
-          {links.map((l) => (
-            <button key={l.key} onClick={() => go(l.key)} className={`text-sm font-medium ${page === l.key ? "text-emerald-600" : t.subtext} hover:text-emerald-600`}>
+        <nav className="hidden md:flex items-center gap-7">
+          {visibleLinks.map((l) => (
+            <button key={l.key} onClick={() => go(l.key)} className={`relative py-1 text-sm font-medium transition-colors ${page === l.key ? "text-brand" : t.subtext} hover:text-brand`}>
               {l.label}
+              {page === l.key && <span className="absolute -bottom-[17px] left-0 right-0 h-0.5 rounded-full bg-brand" />}
             </button>
           ))}
         </nav>
 
         <div className="hidden md:flex items-center gap-3">
-          <button onClick={() => setTheme((th) => (th === "light" ? "dark" : "light"))} className={`p-2 rounded-md ${t.primaryOutline}`}>
+          <button onClick={() => setTheme((th) => (th === "light" ? "dark" : "light"))} aria-label="Toggle theme" className={`p-2 rounded-lg ${t.primaryOutline}`}>
             {t.dark ? "\u2600" : "\u263D"}
           </button>
           {currentUser ? (
             <div className="relative">
-              <button aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)} className={`flex items-center gap-2 px-3 py-2 rounded-md ${t.primaryOutline}`}>
-                <span className="text-sm">{currentUser.first_name}</span>
+              <button aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)} className={`flex items-center gap-2 px-3 py-2 rounded-lg ${t.primaryOutline}`}>
+                <span className="text-sm font-medium">{currentUser.first_name}</span>
                 <Badge t={t} tone={currentUser.role === "admin" ? "success" : "default"}>{currentUser.role === "admin" ? "Admin" : "Customer"}</Badge>
                 <span aria-hidden="true">&#9662;</span>
               </button>
               {menuOpen && (
-                <div className={`absolute right-0 mt-2 w-44 rounded-md border shadow-lg py-1 ${t.cardBg}`} onMouseLeave={() => setMenuOpen(false)}>
-                  <button onClick={() => { go("mybookings"); setMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-emerald-600/10 ${t.text}`}>My Bookings</button>
-                  {currentUser.role === "admin" && <button onClick={() => { go("admin"); setMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-emerald-600/10 ${t.text}`}>Admin Dashboard</button>}
-                  <button onClick={() => { go("account"); setMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-emerald-600/10 ${t.text}`}>Profile</button>
-                  <button disabled={logoutPending} onClick={() => { logout(); setMenuOpen(false); }} className="w-full text-left px-3 py-2 text-sm text-red-500 hover:bg-red-500/10 disabled:opacity-50">{logoutPending ? "Logging out…" : "Logout"}</button>
+                <div className={`absolute right-0 mt-2 w-44 rounded-lg border shadow-lg py-1 ${t.cardBg}`} onMouseLeave={() => setMenuOpen(false)}>
+                  <button onClick={() => { go("mybookings"); setMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-brand/10 ${t.text}`}>My Bookings</button>
+                  {currentUser.role === "admin" && <button onClick={() => { go("admin"); setMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-brand/10 ${t.text}`}>Admin Dashboard</button>}
+                  <button onClick={() => { go("account"); setMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-brand/10 ${t.text}`}>Profile</button>
+                  <button disabled={logoutPending} onClick={() => { logout(); setMenuOpen(false); }} className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50">{logoutPending ? "Logging out…" : "Logout"}</button>
                 </div>
               )}
             </div>
@@ -284,13 +305,13 @@ function NavBar({ page, go, t, setTheme, currentUser, logout, logoutPending }) {
           )}
         </div>
 
-        <button className="md:hidden p-2" onClick={() => setOpen((o) => !o)}>{open ? "\u2715" : "\u2630"}</button>
+        <button className={`md:hidden p-2 rounded-lg ${t.subtext}`} onClick={() => setOpen((o) => !o)} aria-label="Toggle menu">{open ? "\u2715" : "\u2630"}</button>
       </div>
 
       {open && (
-        <div className={`md:hidden border-t ${t.divider} px-4 py-3 flex flex-col gap-3`}>
-          {links.map((l) => (
-            <button key={l.key} onClick={() => { go(l.key); setOpen(false); }} className={`text-left text-sm font-medium ${t.text}`}>{l.label}</button>
+        <div className={`md:hidden border-t ${t.divider} px-4 py-4 flex flex-col gap-3`}>
+          {visibleLinks.map((l) => (
+            <button key={l.key} onClick={() => { go(l.key); setOpen(false); }} className={`text-left text-sm font-medium ${page === l.key ? "text-brand" : t.text}`}>{l.label}</button>
           ))}
           <div className={`h-px border-t ${t.divider}`} />
           {currentUser ? (
@@ -298,12 +319,12 @@ function NavBar({ page, go, t, setTheme, currentUser, logout, logoutPending }) {
               <p className={`text-xs ${t.subtext}`}>Signed in as <span className="font-medium">{currentUser.role === "admin" ? "Administrator" : "Customer"}</span></p>
               <button onClick={() => { go("mybookings"); setOpen(false); }} className={`text-left text-sm font-medium ${t.text}`}>My Bookings</button>
               {currentUser.role === "admin" && <button onClick={() => { go("admin"); setOpen(false); }} className={`text-left text-sm font-medium ${t.text}`}>Admin Dashboard</button>}
-              <button disabled={logoutPending} onClick={() => { logout(); setOpen(false); }} className="text-left text-sm font-medium text-red-500 disabled:opacity-50">{logoutPending ? "Logging out…" : "Logout"}</button>
+              <button disabled={logoutPending} onClick={() => { logout(); setOpen(false); }} className="text-left text-sm font-medium text-red-600 disabled:opacity-50">{logoutPending ? "Logging out…" : "Logout"}</button>
             </>
           ) : (
-            <button onClick={() => { go("login"); setOpen(false); }} className="text-left text-sm font-medium text-emerald-600">Login</button>
+            <button onClick={() => { go("login"); setOpen(false); }} className="text-left text-sm font-medium text-brand">Login</button>
           )}
-          <button onClick={() => setTheme((th) => (th === "light" ? "dark" : "light"))} className={`self-start px-3 py-1.5 rounded-md text-sm ${t.primaryOutline}`}>
+          <button onClick={() => setTheme((th) => (th === "light" ? "dark" : "light"))} className={`self-start px-3 py-1.5 rounded-lg text-sm ${t.primaryOutline}`}>
             {t.dark ? "Light mode" : "Dark mode"}
           </button>
         </div>
@@ -320,21 +341,21 @@ function SearchCard({ t, search, setSearch, onSubmit, error, stations, classType
     <div className={`rounded-xl border shadow-sm p-5 md:p-6 ${t.cardBg}`}>
       <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-3 items-end">
         <Field label="From" t={t}><StationSelect label="From" value={search.from} onChange={(v) => setSearch((s) => ({ ...s, from: v }))} t={t} stations={stations} excludeCode={search.to} /></Field>
-        <button onClick={swap} aria-label="Swap stations" className={`hidden md:flex items-center justify-center w-11 h-11 rounded-full mb-0.5 self-end text-lg ${t.primaryOutline}`}>&#8646;</button>
+        <button onClick={swap} aria-label="Swap stations" className={`hidden md:flex items-center justify-center w-11 h-11 rounded-full mb-0.5 self-end text-lg transition-colors ${t.primaryOutline}`}>&#8646;</button>
         <Field label="To" t={t}><StationSelect label="To" value={search.to} onChange={(v) => setSearch((s) => ({ ...s, to: v }))} t={t} stations={stations} excludeCode={search.from} /></Field>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
         <Field label="Journey date" t={t}>
-          <input type="date" min={todayISO()} value={search.date} onChange={(e) => setSearch((s) => ({ ...s, date: e.target.value }))} className={`w-full px-3 py-2.5 rounded-md border text-sm ${t.inputBg}`} />
+          <input type="date" min={todayISO()} value={search.date} onChange={(e) => setSearch((s) => ({ ...s, date: e.target.value }))} className={`w-full px-3.5 py-3 rounded-lg border text-sm ${t.inputBg}`} />
         </Field>
         <Field label="Class" t={t}>
-          <select value={search.klass} onChange={(e) => setSearch((s) => ({ ...s, klass: e.target.value }))} className={`w-full px-3 py-2.5 rounded-md border text-sm ${t.inputBg}`}>
+          <select value={search.klass} onChange={(e) => setSearch((s) => ({ ...s, klass: e.target.value }))} className={`w-full px-3.5 py-3 rounded-lg border text-sm ${t.inputBg}`}>
             <option value="">All Classes</option>
             {classTypes.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </Field>
         <div className="flex items-end">
-          <PrimaryButton t={t} onClick={onSubmit} className="w-full">&#128269; Search Trains</PrimaryButton>
+          <PrimaryButton t={t} onClick={onSubmit} className="w-full">Search Trains</PrimaryButton>
         </div>
       </div>
       <ErrorBanner message={error} />
@@ -353,7 +374,7 @@ const POPULAR_ROUTES = [
   ["DHK", "KHL"],
 ];
 
-function StatStrip({ t, stations, classTypes }) {
+function StatStrip({ stations, classTypes }) {
   const stats = [
     [String(stations.length || "—"), "Stations served"],
     [String(POPULAR_ROUTES.length), "Popular routes"],
@@ -363,8 +384,8 @@ function StatStrip({ t, stations, classTypes }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-px rounded-xl overflow-hidden border border-white/10 bg-white/10">
       {stats.map(([value, label]) => (
-        <div key={label} className="bg-neutral-900 px-4 py-4 text-center">
-          <p className="text-2xl font-black text-white">{value}</p>
+        <div key={label} className="bg-brand-dark px-4 py-4 text-center">
+          <p className="text-2xl font-bold text-white">{value}</p>
           <p className="mt-1 text-xs text-neutral-400">{label}</p>
         </div>
       ))}
@@ -378,16 +399,16 @@ function PopularRoutes({ t, stations, onPick }) {
   return (
     <section className="max-w-6xl mx-auto px-4 pb-16">
       <div className="mb-6">
-        <p className="text-sm font-bold uppercase tracking-[.2em] text-emerald-600">Popular routes</p>
-        <h2 className={`mt-2 text-3xl font-black ${t.text}`}>Jump straight to a journey</h2>
+        <h2 className={`text-2xl md:text-3xl font-bold tracking-tight ${t.text}`}>Popular routes</h2>
+        <p className={`mt-1.5 text-sm ${t.subtext}`}>Jump straight to a journey you book often.</p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {POPULAR_ROUTES.map(([from, to]) => (
           <button key={`${from}-${to}`} onClick={() => onPick(from, to)}
-            className={`text-left rounded-2xl border p-5 transition-colors ${t.cardBg} hover:border-emerald-500`}>
-            <p className={`text-xs uppercase tracking-wide ${t.subtext}`}>Route</p>
-            <p className={`mt-1 font-bold ${t.text}`}>{cityOf(from)} <span className="text-emerald-600">→</span> {cityOf(to)}</p>
-            <p className={`mt-3 text-xs font-medium text-emerald-600`}>Search this route &rarr;</p>
+            className={`text-left rounded-xl border p-5 transition-colors ${t.cardBg} hover:border-brand`}>
+            <p className={`text-xs ${t.subtext}`}>Route</p>
+            <p className={`mt-1.5 font-semibold ${t.text}`}>{cityOf(from)} <span className="text-brand">→</span> {cityOf(to)}</p>
+            <p className="mt-3 text-xs font-medium text-brand">Search this route &rarr;</p>
           </button>
         ))}
       </div>
@@ -408,13 +429,12 @@ function HomePage({ t, search, setSearch, doSearch, searchError, stations, class
   };
   return (
     <div>
-      <section className={`${t.hero} relative overflow-hidden text-white border-b border-neutral-800`}>
+      <section className={`${t.hero} relative overflow-hidden text-white`}>
         <div className="max-w-6xl mx-auto px-4 pt-14 pb-24 md:pt-20 md:pb-28 relative">
           <div className="max-w-3xl float-in">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold tracking-wide text-emerald-300"><span className="h-2 w-2 rounded-full bg-emerald-400" /> YOUR NEXT JOURNEY STARTS HERE</div>
-            <h1 className="mt-6 text-4xl md:text-6xl font-black leading-[1.05] tracking-tight">Go further.<br /><span className="text-emerald-400">Feel closer.</span></h1>
-            <p className="mt-5 max-w-xl text-base md:text-lg leading-relaxed text-neutral-300">A smarter, smoother way to discover Bangladesh by rail. Find a train, choose your seat, and book the journey in a few easy steps.</p>
-            <div className="mt-7 max-w-xl"><StatStrip t={t} stations={stations} classTypes={classTypes} /></div>
+            <h1 className="text-3xl md:text-5xl font-bold leading-[1.1] tracking-tight">Go further. Feel closer.</h1>
+            <p className="mt-5 max-w-xl text-base leading-relaxed text-neutral-300">A smarter, smoother way to discover Bangladesh by rail. Find a train, choose your seat, and book the journey in a few easy steps.</p>
+            <div className="mt-8 max-w-xl"><StatStrip stations={stations} classTypes={classTypes} /></div>
           </div>
         </div>
       </section>
@@ -424,14 +444,15 @@ function HomePage({ t, search, setSearch, doSearch, searchError, stations, class
       <PopularRoutes t={t} stations={stations} onPick={pickRoute} />
       <section className="max-w-6xl mx-auto px-4 pb-20">
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
-          <div><p className="text-sm font-bold uppercase tracking-[.2em] text-emerald-600">How it works</p><h2 className={`mt-2 text-3xl font-black ${t.text}`}>Your trip, made simple</h2></div>
+          <h2 className={`text-2xl md:text-3xl font-bold tracking-tight ${t.text}`}>Your trip, made simple</h2>
           <p className={`max-w-sm text-sm leading-relaxed ${t.subtext}`}>From your first search to the final ticket, everything you need is in one clear flow.</p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {steps.map(([number, title, copy], index) => (
-            <div key={number} className={`relative rounded-2xl border p-5 ${t.cardBg} ${index === 0 ? "ring-1 ring-emerald-400/30" : ""}`}>
-              <div className="flex items-center justify-between"><span className="text-3xl font-black text-emerald-500/25">{number}</span><span className={`h-9 w-9 rounded-xl flex items-center justify-center ${t.cardAltBg} text-emerald-600`}>{["⌕", "▦", "♙", "✓"][index]}</span></div>
-              <h3 className={`mt-5 font-bold ${t.text}`}>{title}</h3><p className={`mt-2 text-sm leading-relaxed ${t.subtext}`}>{copy}</p>
+            <div key={number} className={`relative rounded-xl border p-5 ${t.cardBg} ${index === 0 ? "ring-1 ring-brand/25" : ""}`}>
+              <span className="text-2xl font-bold text-brand/25">{number}</span>
+              <h3 className={`mt-4 font-semibold ${t.text}`}>{title}</h3>
+              <p className={`mt-2 text-sm leading-relaxed ${t.subtext}`}>{copy}</p>
             </div>
           ))}
         </div>
@@ -470,10 +491,10 @@ function LoginPage({ t, pendingSearch, onLogin, stations }) {
 
   return (
     <div className="max-w-md mx-auto px-4 py-14">
-      <h1 className={`text-2xl font-bold ${t.text}`}>{mode === "login" ? "Login" : "Create Account"}</h1>
+      <h1 className={`text-2xl font-bold tracking-tight ${t.text}`}>{mode === "login" ? "Login" : "Create Account"}</h1>
 
       {pendingSearch && (
-        <div className={`mt-4 rounded-md border p-3 text-sm ${t.cardAltBg} ${t.text}`}>
+        <div className={`mt-4 rounded-lg border p-3 text-sm ${t.cardAltBg} ${t.text}`}>
           Please log in to continue with train search and booking.
           <div className={`mt-1 ${t.subtext}`}>
             {stationCity(pendingSearch.from)} → {stationCity(pendingSearch.to)}, {fmtDate(pendingSearch.date)}
@@ -485,22 +506,22 @@ function LoginPage({ t, pendingSearch, onLogin, stations }) {
       <form onSubmit={submit} className={`mt-6 rounded-xl border p-5 space-y-4 ${t.cardBg}`}>
         {mode === "register" && (
           <div className="grid grid-cols-2 gap-3">
-            <Field label="First Name" t={t}><input required autoComplete="given-name" value={form.first_name} onChange={(e) => upd("first_name", e.target.value)} className={`w-full px-3 py-2.5 rounded-md border text-sm ${t.inputBg}`} /></Field>
-            <Field label="Last Name" t={t}><input required autoComplete="family-name" value={form.last_name} onChange={(e) => upd("last_name", e.target.value)} className={`w-full px-3 py-2.5 rounded-md border text-sm ${t.inputBg}`} /></Field>
+            <Field label="First Name" t={t}><input required autoComplete="given-name" value={form.first_name} onChange={(e) => upd("first_name", e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
+            <Field label="Last Name" t={t}><input required autoComplete="family-name" value={form.last_name} onChange={(e) => upd("last_name", e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
           </div>
         )}
-        <Field label="Email" t={t}><input required type="email" autoComplete="email" value={form.email} onChange={(e) => upd("email", e.target.value)} className={`w-full px-3 py-2.5 rounded-md border text-sm ${t.inputBg}`} /></Field>
-        <Field label="Password" t={t}><input required type="password" minLength={mode === "register" ? 6 : undefined} autoComplete={mode === "login" ? "current-password" : "new-password"} value={form.password} onChange={(e) => upd("password", e.target.value)} className={`w-full px-3 py-2.5 rounded-md border text-sm ${t.inputBg}`} /></Field>
+        <Field label="Email" t={t}><input required type="email" autoComplete="email" value={form.email} onChange={(e) => upd("email", e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
+        <Field label="Password" t={t}><input required type="password" minLength={mode === "register" ? 6 : undefined} autoComplete={mode === "login" ? "current-password" : "new-password"} value={form.password} onChange={(e) => upd("password", e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
         {mode === "register" && <p className={`text-xs ${t.subtext}`}>New accounts are created as customers. An existing administrator can grant administrator access later.</p>}
         <ErrorBanner message={error} />
         <PrimaryButton t={t} type="submit" disabled={loading} className="w-full">
           {loading ? "Please wait…" : mode === "login" ? "Login" : "Create Account"}
         </PrimaryButton>
         <div className="flex justify-between text-sm">
-          <button type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }} className="text-emerald-600 hover:underline">
+          <button type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }} className="text-brand hover:underline font-medium">
             {mode === "login" ? "Create Account" : "Back to Login"}
           </button>
-          {mode === "login" && <button type="button" className="text-emerald-600 hover:underline" onClick={() => setError("Password reset is not available in this demonstration yet. Please contact an administrator.")}>Forgot Password?</button>}
+          {mode === "login" && <button type="button" className="text-brand hover:underline font-medium" onClick={() => setError("Password reset is not available in this demonstration yet. Please contact an administrator.")}>Forgot Password?</button>}
         </div>
         {mode === "login" && (
           <p className={`text-xs ${t.subtext} pt-2 border-t ${t.divider}`}>Customers and administrators use this same sign-in form. Demo customer: <b>rahim@example.com</b> / <b>password123</b>.</p>
@@ -535,7 +556,7 @@ function ResultsPage({ t, search, go, stations }) {
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <h1 className={`text-xl font-bold ${t.text}`}>{from?.city} → {to?.city}</h1>
+          <h1 className={`text-xl font-bold tracking-tight ${t.text}`}>{from?.city} → {to?.city}</h1>
           <p className={`text-sm ${t.subtext}`}>{fmtDate(search.date)}{search.klass ? ` · ${search.klass}` : ""}</p>
         </div>
         <OutlineButton t={t} onClick={() => go("home")}>&larr; Modify Search</OutlineButton>
@@ -553,30 +574,30 @@ function ResultsPage({ t, search, go, stations }) {
       <div className="space-y-4">
         {trips && trips.map((trip) => (
           <div key={trip.trip_id} className={`rounded-xl border p-5 ${t.cardBg}`}>
-            <h2 className="font-bold uppercase tracking-wide text-orange-500">{trip.train_name} <span className="font-normal text-slate-500">({trip.train_id})</span></h2>
-            <div className="my-4 grid grid-cols-[1fr_auto] items-center border-y -mx-5 px-5 py-3">
+            <h2 className={`font-semibold tracking-tight ${t.text}`}>{trip.train_name} <span className={`font-normal text-sm ${t.subtext}`}>#{trip.train_id}</span></h2>
+            <div className={`my-4 grid grid-cols-[1fr_auto] items-center border-y -mx-5 px-5 py-3 ${t.divider}`}>
               <div className="flex items-center gap-4">
-                <div className="w-24 shrink-0 text-right"><p className={`text-xs font-bold ${t.text}`}>{shortDate(trip.origin_departure)} · {clock(trip.origin_departure)}</p><p className={`text-sm ${t.subtext}`}>{from?.city || from?.station_name}</p></div>
-                <div className="min-w-12 flex-1 text-center"><div className="relative border-t-2 border-slate-200"><span className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 border-2 border-emerald-600 bg-white" /></div><p className={`mt-2 text-xs ${t.subtext}`}>{duration(trip.origin_departure, trip.destination_arrival)}</p></div>
-                <div className="w-24 shrink-0"><p className={`text-xs font-bold ${t.text}`}>{shortDate(trip.destination_arrival)} · {clock(trip.destination_arrival)}</p><p className={`text-sm ${t.subtext}`}>{to?.city || to?.station_name}</p></div>
+                <div className="w-24 shrink-0 text-right"><p className={`text-xs font-semibold ${t.text}`}>{shortDate(trip.origin_departure)} · {clock(trip.origin_departure)}</p><p className={`text-sm ${t.subtext}`}>{from?.city || from?.station_name}</p></div>
+                <div className="min-w-12 flex-1 text-center"><div className={`relative border-t-2 ${t.divider}`}><span className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-brand bg-white" /></div><p className={`mt-2 text-xs ${t.subtext}`}>{duration(trip.origin_departure, trip.destination_arrival)}</p></div>
+                <div className="w-24 shrink-0"><p className={`text-xs font-semibold ${t.text}`}>{shortDate(trip.destination_arrival)} · {clock(trip.destination_arrival)}</p><p className={`text-sm ${t.subtext}`}>{to?.city || to?.station_name}</p></div>
               </div>
-              <div className="border-l pl-4 text-center text-emerald-700"><div className="text-xl">⚑</div><span className="text-[11px] font-semibold">Train Details</span></div>
+              <div className={`border-l pl-4 text-center text-brand ${t.divider}`}><span className="text-[11px] font-semibold">Details</span></div>
             </div>
-            <details className="mb-3 text-xs text-slate-600">
-              <summary className="w-fit cursor-pointer font-semibold text-emerald-700">View all station times</summary>
-              <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 rounded-lg bg-slate-50 p-3">
-                {(trip.stops || []).map((stop) => <span key={stop.station_code}><b>{stop.city}</b> · Arr {String(stop.arrival_time).slice(0, 5)} / Dep {String(stop.departure_time).slice(0, 5)}</span>)}
+            <details className="mb-3 text-xs">
+              <summary className="w-fit cursor-pointer font-semibold text-brand">View all station times</summary>
+              <div className={`mt-2 flex flex-wrap gap-x-5 gap-y-1 rounded-lg p-3 ${t.cardAltBg}`}>
+                {(trip.stops || []).map((stop) => <span key={stop.station_code} className={t.subtext}><b className={t.text}>{stop.city}</b> · Arr {String(stop.arrival_time).slice(0, 5)} / Dep {String(stop.departure_time).slice(0, 5)}</span>)}
               </div>
             </details>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {trip.classes.map((c) => (
-                <div key={c.coach_type} className={`flex min-h-36 flex-col justify-between rounded-md border px-3 py-3 ${c.available > 0 ? "border-emerald-700 bg-emerald-50/60" : "border-rose-100 bg-rose-50"}`}>
+                <div key={c.coach_type} className={`flex min-h-36 flex-col justify-between rounded-lg border px-3 py-3 ${c.available > 0 ? "border-brand/30 bg-brand/5" : `${t.divider} ${t.cardAltBg}`}`}>
                   <div>
-                    <p className="font-bold text-sm text-slate-700">{c.coach_type.toUpperCase()}</p>
-                    <p className="mt-1 text-[11px] leading-tight text-slate-600">Available Tickets<br />(Counter + Online)</p>
-                    <p className={`text-sm font-bold ${c.available > 0 ? "text-emerald-700" : "text-red-500"}`}>{c.available}</p>
+                    <p className={`font-semibold text-sm ${t.text}`}>{c.coach_type.toUpperCase()}</p>
+                    <p className={`mt-1 text-[11px] leading-tight ${t.subtext}`}>Available Tickets<br />(Counter + Online)</p>
+                    <p className={`text-sm font-bold ${c.available > 0 ? "text-brand" : "text-red-500"}`}>{c.available}</p>
                   </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-black/5 pt-2">
+                  <div className={`flex flex-wrap items-center justify-between gap-2 border-t pt-2 ${t.divider}`}>
                     <span className={`text-sm font-semibold ${t.text}`}>৳{c.fare}</span>
                     <PrimaryButton t={t} disabled={c.available === 0} onClick={() => go("coach", { tripId: trip.trip_id, klass: c.coach_type, fare: c.fare })}>Book Now</PrimaryButton>
                   </div>
@@ -608,7 +629,7 @@ function CoachPage({ t, go, ctx }) {
       <h2 className={`mt-6 mb-3 font-semibold ${t.text}`}>Select Coach</h2>
       <div className="flex flex-wrap gap-3">
         {data.coaches.map((c) => (
-          <button key={c.coach_id} onClick={() => go("seats", { coach: c, trainName: data.trip.train_name, date: data.trip.departure_date })} className={`px-6 py-4 rounded-lg border font-semibold ${t.cardBg} ${t.text} hover:border-emerald-600`}>
+          <button key={c.coach_id} onClick={() => go("seats", { coach: c, trainName: data.trip.train_name, date: data.trip.departure_date })} className={`px-6 py-4 rounded-lg border font-semibold transition-colors ${t.cardBg} ${t.text} hover:border-brand`}>
             Coach {c.coach_number}
           </button>
         ))}
@@ -644,20 +665,20 @@ function SeatsPage({ t, go, ctx }) {
       <h2 className={`mt-6 mb-3 font-semibold ${t.text}`}>Select Seat(s) — Coach {ctx.coach.coach_number}</h2>
       <div className="flex gap-4 text-xs mb-4">
         <span className={`flex items-center gap-1.5 ${t.subtext}`}><span className="w-3 h-3 rounded-sm bg-neutral-300 inline-block" /> Available</span>
-        <span className={`flex items-center gap-1.5 ${t.subtext}`}><span className="w-3 h-3 rounded-sm bg-emerald-600 inline-block" /> Selected</span>
-        <span className={`flex items-center gap-1.5 ${t.subtext}`}><span className="w-3 h-3 rounded-sm bg-orange-400 inline-block" /> Held / Sold</span>
+        <span className={`flex items-center gap-1.5 ${t.subtext}`}><span className="w-3 h-3 rounded-sm bg-brand inline-block" /> Selected</span>
+        <span className={`flex items-center gap-1.5 ${t.subtext}`}><span className="w-3 h-3 rounded-sm bg-amber-500 inline-block" /> Held / Sold</span>
       </div>
       <div className={`rounded-xl border p-4 space-y-2 ${t.cardBg}`}>
         {rows.map((row, i) => (
           <div key={i} className="flex gap-2 justify-center">
             {row.map((seat, idx) => {
               const isSel = selected.includes(seat.seat_id);
-              const cls = seat.taken ? "bg-orange-400 text-white cursor-not-allowed opacity-70"
-                : isSel ? "bg-emerald-600 text-white"
-                : `${t.cardAltBg} ${t.text} hover:border-emerald-600`;
+              const cls = seat.taken ? "bg-amber-500 text-white cursor-not-allowed opacity-70"
+                : isSel ? "bg-brand text-white"
+                : `${t.cardAltBg} ${t.text} hover:border-brand`;
               return (
                 <React.Fragment key={seat.seat_id}>
-                  <button disabled={seat.taken} onClick={() => toggle(seat)} className={`w-11 h-11 rounded-md border text-xs font-semibold flex items-center justify-center ${cls}`}>{seat.seat_number}</button>
+                  <button disabled={seat.taken} onClick={() => toggle(seat)} className={`w-11 h-11 rounded-lg border text-xs font-semibold flex items-center justify-center transition-colors ${cls}`}>{seat.seat_number}</button>
                   {idx === 1 && <div className="w-4" />}
                 </React.Fragment>
               );
@@ -713,10 +734,10 @@ function PassengerPage({ t, go, ctx, currentUser }) {
       <div className="space-y-4">
         {ctx.seats.map((seat, i) => (
           <div key={seat.seat_id} className={`rounded-xl border p-4 ${t.cardBg}`}>
-            <p className={`text-xs mb-3 ${t.subtext}`}>Seat {seat.seat_number} ({seat.seat_type})</p>
+            <p className={`text-xs mb-3 font-medium ${t.subtext}`}>Seat {seat.seat_number} ({seat.seat_type})</p>
             <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-3">
-              <Field label="Passenger Name" t={t}><input value={passengers[i].name} onChange={(e) => update(i, "name", e.target.value)} className={`w-full px-3 py-2.5 rounded-md border text-sm ${t.inputBg}`} /></Field>
-              <Field label="Age" t={t}><input type="number" min="0" value={passengers[i].age} onChange={(e) => update(i, "age", e.target.value)} className={`w-full px-3 py-2.5 rounded-md border text-sm ${t.inputBg}`} /></Field>
+              <Field label="Passenger Name" t={t}><input value={passengers[i].name} onChange={(e) => update(i, "name", e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
+              <Field label="Age" t={t}><input type="number" min="0" value={passengers[i].age} onChange={(e) => update(i, "age", e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
             </div>
           </div>
         ))}
@@ -760,7 +781,7 @@ function PaymentPage({ t, go, ctx, stations }) {
   if (!active) {
     return (
       <div className="max-w-md mx-auto px-4 py-16 text-center">
-        <h1 className={`text-xl font-bold ${t.text}`}>Your temporary seat reservation has expired.</h1>
+        <h1 className={`text-xl font-bold tracking-tight ${t.text}`}>Your temporary seat reservation has expired.</h1>
         <div className="flex gap-3 justify-center mt-6">
           <OutlineButton t={t} onClick={() => go("results")}>Search Again</OutlineButton>
           <PrimaryButton t={t} onClick={() => go("home")}>Return Home</PrimaryButton>
@@ -807,9 +828,9 @@ function PaymentPage({ t, go, ctx, stations }) {
       <BackBar t={t} disabled={cancelling} onBack={abandonHold} label={ctx.fromMyBookings ? "Back to My Bookings" : cancelling ? "Releasing reservation…" : "Back and release reservation"} />
       <JourneySummary t={t} trainName={first.train_name} fromCity={fromCity} toCity={toCity} date={first.departure_date} klass={first.coach_type} coachNumber={first.coach_number} />
 
-      <div className={`mt-4 rounded-md px-4 py-2.5 flex items-center justify-between text-sm ${t.cardAltBg}`}>
-        <span className="flex items-center gap-1.5 font-medium text-orange-500">&#9201; Seat held for</span>
-        <span className="font-mono font-semibold text-orange-500">{fmtMMSS(remaining)}</span>
+      <div className={`mt-4 rounded-lg px-4 py-2.5 flex items-center justify-between text-sm border ${t.dark ? "border-amber-900/60 bg-amber-950/20" : "border-amber-200 bg-amber-50"}`}>
+        <span className={`font-medium ${t.dark ? "text-amber-400" : "text-amber-700"}`}>Seat held for</span>
+        <span className={`font-mono font-semibold ${t.dark ? "text-amber-400" : "text-amber-700"}`}>{fmtMMSS(remaining)}</span>
       </div>
 
       <div className={`mt-4 rounded-xl border p-5 ${t.cardBg}`}>
@@ -831,7 +852,7 @@ function PaymentPage({ t, go, ctx, stations }) {
         <h3 className={`font-semibold mb-3 ${t.text}`}>Payment Method</h3>
         <div className="flex gap-3 flex-wrap">
           {["bKash", "Nagad", "Card"].map((m) => (
-            <button key={m} onClick={() => setMethod(m)} className={`px-4 py-2 rounded-md border text-sm font-medium ${method === m ? "border-emerald-600 text-emerald-600" : `${t.cardAltBg} ${t.text}`}`}>{m}</button>
+            <button key={m} onClick={() => setMethod(m)} className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${method === m ? "border-brand text-brand bg-brand/5" : `${t.cardAltBg} ${t.text}`}`}>{m}</button>
           ))}
         </div>
         <label className={`flex items-center gap-2 mt-4 text-xs ${t.subtext}`}>
@@ -857,7 +878,7 @@ function TicketPage({ t, go, ctx, stations }) {
     <div className="max-w-2xl mx-auto px-4 py-8">
       <div className="text-center mb-6">
         <p className="text-3xl">&#9989;</p>
-        <h1 className={`text-2xl font-bold ${t.text}`}>Booking Confirmed</h1>
+        <h1 className={`text-2xl font-bold tracking-tight ${t.text}`}>Booking Confirmed</h1>
       </div>
       <div className={`rounded-xl border p-6 ${t.cardBg}`}>
         <div className="flex justify-between items-start mb-4">
@@ -865,7 +886,7 @@ function TicketPage({ t, go, ctx, stations }) {
             <p className={`text-xs ${t.subtext}`}>PNR Number</p>
             <p className={`text-lg font-bold tracking-wide ${t.text}`}>{booking.pnr_number}</p>
           </div>
-          <img src={qrUrl} alt="Ticket QR code" className="w-20 h-20 rounded" />
+          <img src={qrUrl} alt="Ticket QR code" className="w-20 h-20 rounded-lg" />
         </div>
         <div className={`grid grid-cols-2 gap-y-3 gap-x-4 text-sm border-t pt-4 ${t.divider}`}>
           <InfoRow t={t} label="Train" value={first.train_name} />
@@ -920,7 +941,7 @@ function MyBookingsPage({ t, go }) {
   const Row = ({ b }) => {
     const tone = b.effective_status === "confirmed" ? "success" : b.effective_status === "pending" ? "warn" : "danger";
     return (
-      <button onClick={() => openBooking(b)} className={`w-full text-left rounded-xl border p-4 flex items-center justify-between ${t.cardBg} hover:border-emerald-600`}>
+      <button onClick={() => openBooking(b)} className={`w-full text-left rounded-xl border p-4 flex items-center justify-between transition-colors ${t.cardBg} hover:border-brand`}>
         <div>
           <p className={`font-medium ${t.text}`}>{b.starts_at_station} → {b.ends_at_station}</p>
           <p className={`text-xs ${t.subtext}`}>PNR {b.pnr_number} · ৳{b.fare} · {fmtDate(b.booking_date)}</p>
@@ -932,7 +953,7 @@ function MyBookingsPage({ t, go }) {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      <h1 className={`text-xl font-bold mb-6 ${t.text}`}>My Bookings</h1>
+      <h1 className={`text-xl font-bold tracking-tight mb-6 ${t.text}`}>My Bookings</h1>
       <h2 className={`text-sm font-semibold mb-2 ${t.subtext}`}>Upcoming</h2>
       <div className="space-y-3 mb-8">
         {upcoming.length === 0 && <p className={`text-sm ${t.subtext}`}>No upcoming bookings.</p>}
@@ -952,6 +973,7 @@ function AdminPage({ t, currentUser }) {
   const [users, setUsers] = useState(null);
   const [bookings, setBookings] = useState(null);
   const [tickets, setTickets] = useState(null);
+  const [contacts, setContacts] = useState(null);
   const [ticketFilter, setTicketFilter] = useState("");
   const [editingTicket, setEditingTicket] = useState(null);
   const [ticketEdit, setTicketEdit] = useState({ passenger_name: "", passenger_age: "" });
@@ -963,13 +985,14 @@ function AdminPage({ t, currentUser }) {
   const load = async () => {
     setError("");
     try {
-      const [nextSummary, nextUsers, nextBookings, nextTickets] = await Promise.all([
-        api("/admin/summary"), api("/admin/users"), api("/admin/bookings"), api("/admin/tickets"),
+      const [nextSummary, nextUsers, nextBookings, nextContacts] = await Promise.all([
+        api("/admin/summary"), api("/admin/users"), api("/admin/records"), api("/admin/contacts"),
       ]);
       setSummary(nextSummary);
       setUsers(nextUsers);
       setBookings(nextBookings);
-      setTickets(nextTickets);
+      setTickets(nextBookings);
+      setContacts(nextContacts);
     } catch (e) { setError(e.message); }
   };
 
@@ -1033,7 +1056,7 @@ function AdminPage({ t, currentUser }) {
   };
 
   if (error) return <div className="max-w-4xl mx-auto px-4 py-8"><ErrorBanner message={error} /></div>;
-  if (!summary || !users || !bookings) return <div className="max-w-4xl mx-auto px-4 py-8"><p className={t.subtext}>Loading admin dashboard…</p></div>;
+  if (!summary || !users || !bookings || !contacts) return <div className="max-w-4xl mx-auto px-4 py-8"><p className={t.subtext}>Loading admin dashboard…</p></div>;
 
   const cards = [
     ["Customers", summary.users.customers],
@@ -1044,7 +1067,7 @@ function AdminPage({ t, currentUser }) {
   ];
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
-      <h1 className={`text-2xl font-bold ${t.text}`}>Admin Dashboard</h1>
+      <h1 className={`text-2xl font-bold tracking-tight ${t.text}`}>Admin Dashboard</h1>
       <p className={`mt-1 text-sm ${t.subtext}`}>This area is available only to accounts with administrator privileges.</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
         {cards.map(([label, value]) => (
@@ -1056,24 +1079,24 @@ function AdminPage({ t, currentUser }) {
       </div>
 
       <section className={`mt-8 rounded-xl border overflow-hidden ${t.cardBg}`}>
-        <div className="p-5 border-b"><h2 className={`font-semibold ${t.text}`}>Create Account</h2><p className={`text-sm mt-1 ${t.subtext}`}>Provision a customer or administrator account from the protected admin area.</p></div>
+        <div className={`p-5 border-b ${t.divider}`}><h2 className={`font-semibold ${t.text}`}>Create Account</h2><p className={`text-sm mt-1 ${t.subtext}`}>Provision a customer or administrator account from the protected admin area.</p></div>
         <form onSubmit={createUser} className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
-          <Field label="First name" t={t}><input required value={newUser.first_name} onChange={(e) => setNewUser((u) => ({ ...u, first_name: e.target.value }))} className={`w-full px-3 py-2.5 rounded-md border text-sm ${t.inputBg}`} /></Field>
-          <Field label="Last name" t={t}><input required value={newUser.last_name} onChange={(e) => setNewUser((u) => ({ ...u, last_name: e.target.value }))} className={`w-full px-3 py-2.5 rounded-md border text-sm ${t.inputBg}`} /></Field>
-          <Field label="Email" t={t}><input required type="email" value={newUser.email} onChange={(e) => setNewUser((u) => ({ ...u, email: e.target.value }))} className={`w-full px-3 py-2.5 rounded-md border text-sm ${t.inputBg}`} /></Field>
-          <Field label="Password" t={t}><input required minLength="8" type="password" value={newUser.password} onChange={(e) => setNewUser((u) => ({ ...u, password: e.target.value }))} className={`w-full px-3 py-2.5 rounded-md border text-sm ${t.inputBg}`} /></Field>
+          <Field label="First name" t={t}><input required value={newUser.first_name} onChange={(e) => setNewUser((u) => ({ ...u, first_name: e.target.value }))} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
+          <Field label="Last name" t={t}><input required value={newUser.last_name} onChange={(e) => setNewUser((u) => ({ ...u, last_name: e.target.value }))} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
+          <Field label="Email" t={t}><input required type="email" value={newUser.email} onChange={(e) => setNewUser((u) => ({ ...u, email: e.target.value }))} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
+          <Field label="Password" t={t}><input required minLength="8" type="password" value={newUser.password} onChange={(e) => setNewUser((u) => ({ ...u, password: e.target.value }))} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
           <div className="flex gap-2 items-end">
-            <Field label="Role" t={t}><select value={newUser.role} onChange={(e) => setNewUser((u) => ({ ...u, role: e.target.value }))} className={`w-full px-3 py-2.5 rounded-md border text-sm ${t.inputBg}`}><option value="customer">Customer</option><option value="admin">Administrator</option></select></Field>
+            <Field label="Role" t={t}><select value={newUser.role} onChange={(e) => setNewUser((u) => ({ ...u, role: e.target.value }))} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`}><option value="customer">Customer</option><option value="admin">Administrator</option></select></Field>
             <PrimaryButton t={t} type="submit" disabled={saving === "create-user"}>{saving === "create-user" ? "Creating…" : "Create"}</PrimaryButton>
           </div>
         </form>
       </section>
 
       <section className={`mt-8 rounded-xl border overflow-hidden ${t.cardBg}`}>
-        <div className="p-5 border-b"><h2 className={`font-semibold ${t.text}`}>User Access</h2><p className={`text-sm mt-1 ${t.subtext}`}>Grant or revoke administrator access for other users.</p></div>
+        <div className={`p-5 border-b ${t.divider}`}><h2 className={`font-semibold ${t.text}`}>User Access</h2><p className={`text-sm mt-1 ${t.subtext}`}>Grant or revoke administrator access for other users.</p></div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className={t.cardAltBg}><tr><th className="p-3">User</th><th className="p-3">Email</th><th className="p-3">Role</th><th className="p-3">Action</th></tr></thead>
+            <thead className={t.cardAltBg}><tr><th className={`p-3 font-semibold ${t.subtext}`}>User</th><th className={`p-3 font-semibold ${t.subtext}`}>Email</th><th className={`p-3 font-semibold ${t.subtext}`}>Role</th><th className={`p-3 font-semibold ${t.subtext}`}>Action</th></tr></thead>
             <tbody>
               {users.map((u) => <tr key={u.user_id} className={`border-t ${t.divider}`}>
                 <td className={`p-3 font-medium ${t.text}`}>{u.first_name} {u.last_name}{u.user_id === currentUser.user_id ? " (You)" : ""}</td>
@@ -1081,7 +1104,7 @@ function AdminPage({ t, currentUser }) {
                 <td className="p-3"><Badge t={t} tone={u.role === "admin" ? "success" : "default"}>{u.role}</Badge></td>
                 <td className="p-3">
                   {u.user_id === currentUser.user_id ? <span className={t.subtext}>Protected</span> : (
-                    <button disabled={saving === `role-${u.user_id}`} onClick={() => changeRole(u, u.role === "admin" ? "customer" : "admin")} className="text-emerald-600 hover:underline disabled:opacity-50">
+                    <button disabled={saving === `role-${u.user_id}`} onClick={() => changeRole(u, u.role === "admin" ? "customer" : "admin")} className="text-brand hover:underline font-medium disabled:opacity-50">
                       {saving === `role-${u.user_id}` ? "Saving…" : u.role === "admin" ? "Make customer" : "Make admin"}
                     </button>
                   )}
@@ -1092,42 +1115,24 @@ function AdminPage({ t, currentUser }) {
         </div>
       </section>
 
-      <section className={`mt-8 rounded-xl border overflow-hidden ${t.cardBg}`}>
-        <div className="p-5 border-b"><h2 className={`font-semibold ${t.text}`}>All Bookings</h2><p className={`text-sm mt-1 ${t.subtext}`}>Cancel pending or confirmed bookings when necessary.</p></div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className={t.cardAltBg}><tr><th className="p-3">PNR / Passenger</th><th className="p-3">Journey</th><th className="p-3">Status</th><th className="p-3">Action</th></tr></thead>
-            <tbody>
-              {bookings.length === 0 && <tr><td colSpan="4" className={`p-4 ${t.subtext}`}>No bookings yet.</td></tr>}
-              {bookings.map((b) => <tr key={b.pnr_number} className={`border-t ${t.divider}`}>
-                <td className="p-3"><p className={`font-medium ${t.text}`}>{b.pnr_number}</p><p className={t.subtext}>{b.first_name} {b.last_name} · {b.passenger_count} passenger(s)</p></td>
-                <td className={`p-3 ${t.subtext}`}>{b.starts_at_station} → {b.ends_at_station}<br />{b.train_names || "—"}{b.departure_date ? ` · ${fmtDate(b.departure_date)}` : ""}</td>
-                <td className="p-3"><Badge t={t} tone={b.booking_status === "confirmed" ? "success" : b.booking_status === "pending" ? "warn" : "danger"}>{b.booking_status}</Badge></td>
-                <td className="p-3">
-                  {["pending", "confirmed"].includes(b.booking_status) ? <button disabled={saving === `booking-${b.pnr_number}`} onClick={() => cancelBooking(b.pnr_number)} className="text-red-500 hover:underline disabled:opacity-50">{saving === `booking-${b.pnr_number}` ? "Cancelling…" : "Cancel"}</button> : <span className={t.subtext}>—</span>}
-                </td>
-              </tr>)}
-            </tbody>
-          </table>
-        </div>
-      </section>
+
 
       <section className={`mt-8 rounded-xl border overflow-hidden ${t.cardBg}`}>
-        <div className="p-5 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className={`p-5 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${t.divider}`}>
           <div>
-            <h2 className={`font-semibold ${t.text}`}>All Tickets</h2>
-            <p className={`text-sm mt-1 ${t.subtext}`}>Every passenger ticket ever issued, across every booking. Correct a misspelled name or wrong age here.</p>
+            <h2 className={`font-semibold ${t.text}`}>Bookings & Tickets</h2>
+            <p className={`text-sm mt-1 ${t.subtext}`}>One row per booking passenger. Edit passenger details or cancel the booking from this list.</p>
           </div>
           <input value={ticketFilter} onChange={(e) => setTicketFilter(e.target.value)} placeholder="Filter by PNR, name or train…"
-            className={`px-3 py-2 rounded-md border text-sm w-full sm:w-64 ${t.inputBg}`} />
+            className={`px-3.5 py-2 rounded-lg border text-sm w-full sm:w-64 ${t.inputBg}`} />
         </div>
         <ErrorBanner message={ticketError} />
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className={t.cardAltBg}><tr><th className="p-3">PNR</th><th className="p-3">Passenger</th><th className="p-3">Journey</th><th className="p-3">Seat</th><th className="p-3">Status</th><th className="p-3">Action</th></tr></thead>
+            <thead className={t.cardAltBg}><tr><th className={`p-3 font-semibold ${t.subtext}`}>PNR / Customer</th><th className={`p-3 font-semibold ${t.subtext}`}>Passenger</th><th className={`p-3 font-semibold ${t.subtext}`}>Journey / Train</th><th className={`p-3 font-semibold ${t.subtext}`}>Seat</th><th className={`p-3 font-semibold ${t.subtext}`}>Status</th><th className={`p-3 font-semibold ${t.subtext}`}>Actions</th></tr></thead>
             <tbody>
               {!tickets && <tr><td colSpan="6" className={`p-4 ${t.subtext}`}>Loading tickets…</td></tr>}
-              {tickets && tickets.length === 0 && <tr><td colSpan="6" className={`p-4 ${t.subtext}`}>No tickets have been issued yet.</td></tr>}
+              {tickets && tickets.length === 0 && <tr><td colSpan="6" className={`p-4 ${t.subtext}`}>No booking records yet.</td></tr>}
               {tickets && tickets
                 .filter((tk) => {
                   const q = ticketFilter.trim().toLowerCase();
@@ -1136,38 +1141,41 @@ function AdminPage({ t, currentUser }) {
                     .some((v) => (v || "").toLowerCase().includes(q));
                 })
                 .map((tk) => {
-                  const editing = editingTicket === tk.ticket_id;
+                  const editing = Boolean(tk.ticket_id) && editingTicket === tk.ticket_id;
                   return (
-                    <tr key={tk.ticket_id} className={`border-t ${t.divider}`}>
-                      <td className={`p-3 font-medium ${t.text}`}>{tk.pnr_number}</td>
+                    <tr key={tk.ticket_id || tk.pnr_number} className={`border-t ${t.divider}`}>
+                      <td className={`p-3 ${t.text}`}><p className="font-medium">{tk.pnr_number}</p><p className={t.subtext}>{tk.first_name} {tk.last_name}<br />{tk.email}</p></td>
                       <td className="p-3">
                         {editing ? (
                           <div className="flex gap-2">
                             <input value={ticketEdit.passenger_name} onChange={(e) => setTicketEdit((f) => ({ ...f, passenger_name: e.target.value }))}
-                              className={`w-32 px-2 py-1.5 rounded-md border text-sm ${t.inputBg}`} placeholder="Name" />
+                              className={`w-32 px-2 py-1.5 rounded-lg border text-sm ${t.inputBg}`} placeholder="Name" />
                             <input type="number" min="1" value={ticketEdit.passenger_age} onChange={(e) => setTicketEdit((f) => ({ ...f, passenger_age: e.target.value }))}
-                              className={`w-16 px-2 py-1.5 rounded-md border text-sm ${t.inputBg}`} placeholder="Age" />
+                              className={`w-16 px-2 py-1.5 rounded-lg border text-sm ${t.inputBg}`} placeholder="Age" />
                           </div>
                         ) : (
-                          <>
+                          tk.ticket_id ? <>
                             <p className={`font-medium ${t.text}`}>{tk.passenger_name}, {tk.passenger_age}y</p>
-                            <p className={t.subtext}>Booked by {tk.first_name} {tk.last_name}</p>
-                          </>
+                            <p className={t.subtext}>Booking fare ৳{tk.fare}</p>
+                          </> : <span className={t.subtext}>No passenger ticket</span>
                         )}
                       </td>
-                      <td className={`p-3 ${t.subtext}`}>{tk.starts_at_station} → {tk.ends_at_station}<br />{tk.train_name}{tk.departure_date ? ` · ${fmtDate(tk.departure_date)}` : ""}</td>
-                      <td className={`p-3 ${t.subtext}`}>Coach {tk.coach_number} · {tk.seat_number}<br />{tk.coach_type}</td>
+                      <td className={`p-3 ${t.subtext}`}>{tk.starts_at_station} → {tk.ends_at_station}<br />{tk.train_name || "—"}{tk.departure_date ? ` · ${fmtDate(tk.departure_date)}` : ""}</td>
+                      <td className={`p-3 ${t.subtext}`}>{tk.seat_number ? <>Coach {tk.coach_number} · {tk.seat_number}<br />{tk.coach_type}</> : "—"}</td>
                       <td className="p-3"><Badge t={t} tone={tk.booking_status === "confirmed" ? "success" : tk.booking_status === "pending" ? "warn" : "danger"}>{tk.booking_status}</Badge></td>
                       <td className="p-3">
                         {editing ? (
                           <div className="flex gap-2">
-                            <button disabled={saving === `ticket-${tk.ticket_id}`} onClick={() => saveTicket(tk.ticket_id)} className="text-emerald-600 hover:underline disabled:opacity-50">
+                            <button disabled={saving === `ticket-${tk.ticket_id}`} onClick={() => saveTicket(tk.ticket_id)} className="text-brand hover:underline font-medium disabled:opacity-50">
                               {saving === `ticket-${tk.ticket_id}` ? "Saving…" : "Save"}
                             </button>
                             <button onClick={cancelEditTicket} className={t.subtext}>Cancel</button>
                           </div>
                         ) : (
-                          <button onClick={() => startEditTicket(tk)} className="text-emerald-600 hover:underline">Edit</button>
+                          <div className="flex flex-col items-start gap-1">
+                            {tk.ticket_id && <button onClick={() => startEditTicket(tk)} className="text-brand hover:underline font-medium">Edit passenger</button>}
+                            {["pending", "confirmed"].includes(tk.booking_status) && <button disabled={saving === `booking-${tk.pnr_number}`} onClick={() => cancelBooking(tk.pnr_number)} className="text-red-600 hover:underline font-medium disabled:opacity-50">{saving === `booking-${tk.pnr_number}` ? "Cancelling…" : "Cancel booking"}</button>}
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -1175,6 +1183,16 @@ function AdminPage({ t, currentUser }) {
                 })}
             </tbody>
           </table>
+        </div>
+      </section>
+      <section className={`mt-8 rounded-xl border overflow-hidden ${t.cardBg}`}>
+        <div className={`p-5 border-b ${t.divider}`}><h2 className={`font-semibold ${t.text}`}>Contact Messages</h2><p className={`mt-1 text-sm ${t.subtext}`}>Messages submitted through Contact Us.</p></div>
+        <div className="divide-y">
+          {contacts.length === 0 && <p className={`p-5 text-sm ${t.subtext}`}>No contact messages yet.</p>}
+          {contacts.map((message) => <article key={message.contact_id} className="p-5">
+            <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className={`font-semibold ${t.text}`}>{message.subject}</h3><p className={`mt-1 text-sm ${t.subtext}`}>{message.name} · <a className="text-brand hover:underline" href={`mailto:${message.email}`}>{message.email}</a></p></div><time className={`text-xs ${t.subtext}`}>{fmtDate(message.submitted_at)}</time></div>
+            <p className={`mt-3 whitespace-pre-wrap text-sm ${t.text}`}>{message.message}</p>
+          </article>)}
         </div>
       </section>
     </div>
@@ -1186,14 +1204,14 @@ function ClassInfoPage({ t }) {
   useEffect(() => { api("/classes", { auth: false }).then(setClasses).catch(() => setClasses([])); }, []);
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
-      <h1 className={`text-2xl font-bold mb-6 ${t.text}`}>Class Information</h1>
+      <h1 className={`text-2xl font-bold tracking-tight mb-6 ${t.text}`}>Class Information</h1>
       <div className="space-y-4">
         {classes === null && <p className={t.subtext}>Loading…</p>}
         {classes && classes.map((c) => (
           <div key={c.coach_type} className={`rounded-xl border p-5 ${t.cardBg}`}>
             <div className="flex items-center justify-between mb-3">
               <h2 className={`font-semibold ${t.text}`}>{c.coach_type}</h2>
-              <span className={`text-sm font-semibold ${t.text}`}>৳{c.fare ?? "—"}</span>
+              <span className="text-sm font-semibold text-brand">৳{c.fare ?? "—"}</span>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <InfoRow t={t} label="Seat Type" value={c.seatType} />
@@ -1217,19 +1235,33 @@ function AboutPage({ t }) {
   );
   return (
     <div className="max-w-2xl mx-auto px-4 py-10">
-      <h1 className={`text-2xl font-bold mb-6 ${t.text}`}>About Us</h1>
+      <h1 className={`text-2xl font-bold tracking-tight mb-6 ${t.text}`}>About Us</h1>
       <Section title="About Bangladesh Railway">Bangladesh Railway operates the national rail network, connecting major cities and districts across the country with passenger and freight services.</Section>
-      <Section title="Our Purpose">This platform lets passengers search train schedules, check seat availability by class, and complete a ticket booking online from start to finish.</Section>
+      <Section title="Our Purpose">RailX BD lets passengers search train schedules, check seat availability by class, and complete a ticket booking online from start to finish.</Section>
       <Section title="Our Vision">Make rail travel in Bangladesh easier to plan by giving passengers clear, real-time information and a simple booking flow.</Section>
-      <Section title="Why use this platform?">Live seat availability by class, a guided seat-to-payment flow, a temporary hold that protects your seat while you pay, and digital tickets available anytime under My Bookings.</Section>
-      <div className={`mt-8 rounded-md border p-4 text-sm ${t.cardAltBg} ${t.text}`}>This is a demonstration/prototype platform and is not an official Bangladesh Railway website.</div>
+      <Section title="Why use RailX BD?">Live seat availability by class, a guided seat-to-payment flow, a temporary hold that protects your seat while you pay, and digital tickets available anytime under My Bookings.</Section>
+      <div className={`mt-8 rounded-lg border p-4 text-sm ${t.cardAltBg} ${t.text}`}>RailX BD is a demonstration/prototype platform and is not an official Bangladesh Railway website.</div>
     </div>
   );
 }
 
-function ContactPage({ t }) {
-  const [form, setForm] = useState({ name: "", email: "", subject: "", message: "" });
-  const [sent, setSent] = useState(false);
+function ContactPage({ t, currentUser }) {
+  const [form, setForm] = useState({ name: `${currentUser.first_name} ${currentUser.last_name}`.trim(), email: currentUser.email, subject: "", message: "" });
+  const [sent, setSent] = useState("");
+  const [error, setError] = useState("");
+  const [sending, setSending] = useState(false);
+  const submit = async (event) => {
+    event.preventDefault();
+    setSent("");
+    setError("");
+    setSending(true);
+    try {
+      const result = await api("/contact", { method: "POST", body: form });
+      setSent(result.message);
+      setForm((old) => ({ ...old, subject: "", message: "" }));
+    } catch (e) { setError(e.message); }
+    finally { setSending(false); }
+  };
   const faqs = [
     ["How do I search for a train?", "Enter your origin, destination, journey date and class on the home page, then select Search Trains."],
     ["How do I select a seat?", "After choosing a class and coach, tap any available seat in the seat map to select it."],
@@ -1239,25 +1271,22 @@ function ContactPage({ t }) {
   ];
   return (
     <div className="max-w-2xl mx-auto px-4 py-10">
-      <h1 className={`text-2xl font-bold mb-6 ${t.text}`}>Contact Us</h1>
-      <div className={`rounded-xl border p-5 space-y-3 ${t.cardBg}`}>
+      <h1 className={`text-2xl font-bold tracking-tight mb-6 ${t.text}`}>Contact Us</h1>
+      <form onSubmit={submit} className={`rounded-xl border p-5 space-y-3 ${t.cardBg}`}>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Name" t={t}><input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className={`w-full px-3 py-2.5 rounded-md border text-sm ${t.inputBg}`} /></Field>
-          <Field label="Email" t={t}><input value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className={`w-full px-3 py-2.5 rounded-md border text-sm ${t.inputBg}`} /></Field>
+          <Field label="Name" t={t}><input required maxLength="100" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
+          <Field label="Email" t={t}><input required type="email" maxLength="254" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
         </div>
-        <Field label="Subject" t={t}><input value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} className={`w-full px-3 py-2.5 rounded-md border text-sm ${t.inputBg}`} /></Field>
-        <Field label="Message" t={t}><textarea rows={4} value={form.message} onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))} className={`w-full px-3 py-2.5 rounded-md border text-sm ${t.inputBg}`} /></Field>
-        {sent && <p className="text-sm text-green-600">Message sent — thank you (demo, not delivered).</p>}
-        <PrimaryButton t={t} onClick={() => setSent(true)}>Send Message</PrimaryButton>
-      </div>
-      <div className={`mt-6 rounded-xl border p-5 grid grid-cols-1 md:grid-cols-2 gap-3 ${t.cardBg}`}>
-        <div className={`text-sm ${t.text}`}>&#9993; support@bdrailway-demo.example (placeholder)</div>
-        <div className={`text-sm ${t.text}`}>&#9742; 16XXX (placeholder)</div>
-      </div>
+        <Field label="Subject" t={t}><input required maxLength="150" value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
+        <Field label="Message" t={t}><textarea required maxLength="5000" rows={5} value={form.message} onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
+        {error && <ErrorBanner message={error} />}
+        {sent && <p role="status" className="text-sm text-green-600 font-medium">{sent}</p>}
+        <PrimaryButton t={t} type="submit" disabled={sending}>{sending ? "Sending..." : "Send Message"}</PrimaryButton>
+      </form>
       <h2 className={`font-semibold mt-8 mb-3 ${t.text}`}>FAQ</h2>
       <div className="space-y-3">
         {faqs.map(([q, a]) => (
-          <div key={q} className={`rounded-md border p-3 ${t.cardAltBg}`}>
+          <div key={q} className={`rounded-lg border p-3 ${t.cardAltBg}`}>
             <p className={`text-sm font-medium ${t.text}`}>{q}</p>
             <p className={`text-sm mt-1 ${t.subtext}`}>{a}</p>
           </div>
@@ -1275,6 +1304,7 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [pendingSearch, setPendingSearch] = useState(null);
+  const [pendingPage, setPendingPage] = useState(null);
   const [stations, setStations] = useState([]);
   const [classTypes, setClassTypes] = useState([]);
   const [search, setSearch] = useState({ from: "DHK", to: "CTG", date: todayISO(), klass: "" });
@@ -1317,10 +1347,15 @@ function App() {
   useEffect(() => {
     if (!authChecked) return;
     if (AUTH_ONLY_PAGES.has(page) && !currentUser) {
+      if (page === "contact") setPendingPage("contact");
       go("login", {}, { replace: true });
       return;
     }
     if (ADMIN_ONLY_PAGES.has(page) && currentUser?.role !== "admin") {
+      go("home", {}, { replace: true });
+      return;
+    }
+    if (CUSTOMER_ONLY_PAGES.has(page) && currentUser?.role !== "customer") {
       go("home", {}, { replace: true });
       return;
     }
@@ -1372,6 +1407,7 @@ function App() {
   const onLogin = (user) => {
     setCurrentUser(user);
     if (pendingSearch) { setSearch(pendingSearch); setPendingSearch(null); go("results"); }
+    else if (pendingPage) { const destination = pendingPage; setPendingPage(null); go(destination); }
     else go("home");
   };
 
@@ -1424,12 +1460,12 @@ function App() {
     body = <ClassInfoPage t={t} />;
   } else if (page === "about") {
     body = <AboutPage t={t} />;
-  } else if (page === "contact") {
-    body = <ContactPage t={t} />;
+  } else if (page === "contact" && currentUser?.role === "customer") {
+    body = <ContactPage t={t} currentUser={currentUser} />;
   } else if (page === "account" && currentUser) {
     body = (
       <div className="max-w-md mx-auto px-4 py-10">
-        <h1 className={`text-2xl font-bold mb-6 ${t.text}`}>Profile</h1>
+        <h1 className={`text-2xl font-bold tracking-tight mb-6 ${t.text}`}>Profile</h1>
         <div className={`rounded-xl border p-5 space-y-3 ${t.cardBg}`}>
           <InfoRow t={t} label="First Name" value={currentUser.first_name} />
           <InfoRow t={t} label="Last Name" value={currentUser.last_name} />
@@ -1453,7 +1489,7 @@ function App() {
       <NavBar page={page} go={(p) => { if (p === "home") setCtx({}); go(p); }} t={t} setTheme={setTheme} currentUser={currentUser} logout={logout} />
       {body}
       <footer className={`border-t mt-10 py-6 text-center text-xs ${t.divider} ${t.subtext}`}>
-        BD Railway — demonstration/prototype platform, not an official Bangladesh Railway website.
+        RailX BD — demonstration/prototype platform, not an official Bangladesh Railway website.
       </footer>
     </div>
   );

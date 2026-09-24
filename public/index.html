@@ -3,28 +3,63 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="theme-color" content="#0a0a0a" />
-<title>BD Railway — Journey made easy</title>
+<meta name="theme-color" content="#0B6B4F" />
+<title>RailX BD — Journey made easy</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%230B6B4F'/%3E%3Cpath d='M5 18L10.5 6M19 18L13.5 6' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3Cpath d='M3 20.5h18' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <script src="https://cdn.tailwindcss.com"></script>
+<script>
+  // Centralized design tokens: the whole app is built on this single
+  // railway-green brand color plus the neutral scale, so every component
+  // pulls from the same palette instead of scattering ad-hoc colors.
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          brand: {
+            DEFAULT: "#0B6B4F",
+            hover: "#094F3B",
+            dark: "#0A3B2C",
+          },
+        },
+      },
+    },
+  };
+</script>
 <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <style>
-  :root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  /* Same tokens mirrored as CSS variables, for anything outside Tailwind's
+     reach and as a single documented source of truth for the palette. */
+  :root {
+    --color-primary: #0B6B4F;
+    --color-primary-hover: #094F3B;
+    --color-background: #FAFAF9;
+    --color-surface: #FFFFFF;
+    --color-text-primary: #171717;
+    --color-text-secondary: #6B7280;
+    --color-border: #E5E7EB;
+    --color-success: #16A34A;
+    --color-warning: #D97706;
+    --color-error: #DC2626;
+    font-family: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
-  body { margin: 0; background: #fafafa; color: #171717; }
+  body { margin: 0; background: var(--color-background); color: var(--color-text-primary); }
   button, input, select, textarea { font: inherit; }
-  button { transition: transform .18s ease, box-shadow .18s ease, background-color .18s ease, border-color .18s ease; }
+  button { transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease, border-color .15s ease, color .15s ease; }
   button:not(:disabled):hover { transform: translateY(-1px); }
-  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid rgba(16, 185, 129, .35); outline-offset: 2px; }
-  .float-in { animation: floatIn .65s ease both; }
-  @keyframes floatIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-  .station-menu { animation: menuIn .16s ease both; transform-origin: top; }
-  @keyframes menuIn { from { opacity: 0; transform: scaleY(.96) translateY(-4px); } to { opacity: 1; transform: scaleY(1) translateY(0); } }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid rgba(11, 107, 79, .45); outline-offset: 2px; }
+  .float-in { animation: floatIn .5s ease both; }
+  @keyframes floatIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  .station-menu { animation: menuIn .14s ease both; transform-origin: top; }
+  @keyframes menuIn { from { opacity: 0; transform: scaleY(.97) translateY(-4px); } to { opacity: 1; transform: scaleY(1) translateY(0); } }
   .station-scroll::-webkit-scrollbar { width: 8px; }
   .station-scroll::-webkit-scrollbar-thumb { background: #d4d4d4; border-radius: 999px; }
-  .dark .station-scroll::-webkit-scrollbar-thumb { background: #525252; }
   @media print { header, footer, button { display: none !important; } body { background: white; } }
 </style>
 </head>

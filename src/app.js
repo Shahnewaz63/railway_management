@@ -9,6 +9,7 @@ const tripRoutes = require("./routes/trips");
 const bookingRoutes = require("./routes/bookings");
 const classRoutes = require("./routes/classes");
 const adminRoutes = require("./routes/admin");
+const contactRoutes = require("./routes/contact");
 const errorHandler = require("./middleware/errorHandler");
 const { hideApiFromDirectBrowsing } = require("./middleware/apiVisibility");
 
@@ -31,6 +32,7 @@ app.use("/api/search", searchRoutes);
 app.use("/api/trips", tripRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/classes", classRoutes);
+app.use("/api/contact", contactRoutes);
 app.use("/api/admin", adminRoutes);
 
 app.use((req, res, next) => {

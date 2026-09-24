@@ -132,8 +132,16 @@ router.post("/login", async (req, res, next) => {
   }
 });
 
-router.get("/me", requireAuth, (req, res) => {
-  res.json({ user: req.user });
+router.get("/me", requireAuth, async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT user_id, first_name, last_name, email, role
+       FROM users WHERE user_id = $1`,
+      [req.user.user_id]
+    );
+    if (!rows.length) return res.status(401).json({ error: "Your account is no longer available." });
+    res.json({ user: rows[0] });
+  } catch (err) { next(err); }
 });
 
 router.post("/logout", requireAuth, async (req, res, next) => {

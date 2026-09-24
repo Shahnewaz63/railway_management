@@ -41,4 +41,14 @@ async function requireAdmin(req, res, next) {
   }
 }
 
-module.exports = { requireAuth, requireAdmin };
+async function requireCustomer(req, res, next) {
+  try {
+    const { rows } = await pool.query("SELECT role FROM users WHERE user_id = $1", [req.user.user_id]);
+    if (!rows.length || rows[0].role !== "customer") {
+      return res.status(403).json({ error: "Contact Us is available to signed-in customer accounts." });
+    }
+    next();
+  } catch (err) { next(err); }
+}
+
+module.exports = { requireAuth, requireAdmin, requireCustomer };

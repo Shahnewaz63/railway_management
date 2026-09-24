@@ -187,27 +187,37 @@ router.patch("/bookings/:pnr/cancel", async (req, res, next) => {
 
 // Ticket-level view across every booking (past and present), for support and
 // data-entry corrections — the admin dashboard's "All Tickets" panel.
-router.get("/tickets", async (req, res, next) => {
+router.get("/records", async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `SELECT tk.ticket_id, tk.pnr_number, tk.passenger_name, tk.passenger_age, tk.price,
+      `SELECT b.pnr_number, b.booking_status, b.starts_at_station, b.ends_at_station,
+              b.booking_date, b.fare, u.user_id, u.first_name, u.last_name, u.email,
+              tk.ticket_id, tk.passenger_name, tk.passenger_age, tk.price,
               s.seat_id, s.seat_number, c.coach_id, c.coach_number, c.coach_type,
-              t.trip_id, t.departure_date, tr.train_name,
-              b.booking_status, b.starts_at_station, b.ends_at_station, b.booking_date,
-              u.user_id, u.first_name, u.last_name, u.email
-       FROM ticket tk
-       JOIN seat s ON s.seat_id = tk.seat_id
-       JOIN coach c ON c.coach_id = s.coach_id
-       JOIN trip t ON t.trip_id = tk.trip_id
-       JOIN train tr ON tr.train_id = t.train_id
-       JOIN booking b ON b.pnr_number = tk.pnr_number
+              t.trip_id, t.departure_date, tr.train_name
+       FROM booking b
        JOIN users u ON u.user_id = b.user_id
-       ORDER BY b.booking_date DESC, tk.ticket_id`
+       LEFT JOIN ticket tk ON tk.pnr_number = b.pnr_number
+       LEFT JOIN seat s ON s.seat_id = tk.seat_id
+       LEFT JOIN coach c ON c.coach_id = s.coach_id
+       LEFT JOIN trip t ON t.trip_id = tk.trip_id
+       LEFT JOIN train tr ON tr.train_id = t.train_id
+       ORDER BY b.booking_date DESC, b.pnr_number, tk.ticket_id`
     );
     res.json(rows);
   } catch (err) {
     next(err);
   }
+});
+
+router.get("/contacts", async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT contact_id, user_id, name, email, subject, message, submitted_at
+       FROM contact_message ORDER BY submitted_at DESC, contact_id DESC`
+    );
+    res.json(rows);
+  } catch (err) { next(err); }
 });
 
 // Corrects passenger details on an existing ticket — e.g. a misspelled name
