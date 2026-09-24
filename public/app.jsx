@@ -48,25 +48,65 @@ function todayISO() {
   return `${year}-${month}-${day}`;
 }
 
+/* ============================== Routing ============================== */
+
+// A small, dependency-free router: each "page" the app already tracks in
+// state is mapped to a real URL, and browser back/forward is wired through
+// popstate. This makes /login, /admin, /mybookings etc. real, bookmarkable,
+// shareable addresses instead of purely in-memory state.
+const ROUTE_PATHS = {
+  home: "/",
+  login: "/login",
+  results: "/search",
+  coach: "/booking/coach",
+  seats: "/booking/seats",
+  passenger: "/booking/passenger",
+  payment: "/booking/payment",
+  ticket: "/booking/ticket",
+  mybookings: "/mybookings",
+  admin: "/admin",
+  classinfo: "/classinfo",
+  about: "/about",
+  contact: "/contact",
+  account: "/account",
+};
+const PAGE_FROM_PATH = Object.fromEntries(Object.entries(ROUTE_PATHS).map(([k, v]) => [v, k]));
+function pageFromLocation() {
+  return PAGE_FROM_PATH[window.location.pathname] || "home";
+}
+
+// Pages that require *some* signed-in user.
+const AUTH_ONLY_PAGES = new Set(["mybookings", "admin", "account"]);
+// Pages that additionally require the administrator role.
+const ADMIN_ONLY_PAGES = new Set(["admin"]);
+// Pages that only make sense with in-memory booking context (trip/coach/seat
+// selection). These can't be meaningfully deep-linked from a cold URL, so a
+// direct visit sends the visitor back to the flow's start instead of
+// rendering with missing data.
+const CONTEXT_ONLY_PAGES = new Set(["coach", "seats", "passenger", "payment", "ticket"]);
+
 /* ============================== Theme ============================== */
 
 function useTheme() {
   const [theme, setTheme] = useState(localStorage.getItem("bdr_theme") || "light");
   useEffect(() => localStorage.setItem("bdr_theme", theme), [theme]);
   const dark = theme === "dark";
+  // A single, restrained accent (emerald) over a neutral gray scale — the
+  // same pairing carries through both light and dark mode instead of
+  // swapping palettes, which keeps the UI feeling calm and minimal.
   const t = {
     dark,
-    pageBg: dark ? "bg-slate-950" : "bg-[#f6f8fc]",
-    text: dark ? "text-slate-100" : "text-slate-900",
-    subtext: dark ? "text-slate-400" : "text-slate-500",
-    navBg: dark ? "bg-slate-950/95 border-slate-800" : "bg-white/95 border-slate-200",
-    cardBg: dark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200",
-    cardAltBg: dark ? "bg-slate-800/60 border-slate-700" : "bg-slate-50 border-slate-200",
-    inputBg: dark ? "bg-slate-800 border-slate-700 text-slate-100" : "bg-white border-slate-200 text-slate-900",
-    hero: dark ? "bg-[#061633]" : "bg-[#071b3a]",
-    primary: "bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-white shadow-lg shadow-teal-500/20",
-    primaryOutline: dark ? "border border-slate-700 hover:bg-slate-800 text-slate-100" : "border border-slate-200 hover:border-teal-300 hover:bg-teal-50 text-slate-900",
-    divider: dark ? "border-slate-800" : "border-slate-200",
+    pageBg: dark ? "bg-neutral-950" : "bg-neutral-50",
+    text: dark ? "text-neutral-100" : "text-neutral-900",
+    subtext: dark ? "text-neutral-400" : "text-neutral-500",
+    navBg: dark ? "bg-neutral-950/95 border-neutral-800" : "bg-white/95 border-neutral-200",
+    cardBg: dark ? "bg-neutral-900 border-neutral-800" : "bg-white border-neutral-200",
+    cardAltBg: dark ? "bg-neutral-800/60 border-neutral-700" : "bg-neutral-100 border-neutral-200",
+    inputBg: dark ? "bg-neutral-800 border-neutral-700 text-neutral-100" : "bg-white border-neutral-300 text-neutral-900",
+    hero: dark ? "bg-neutral-900" : "bg-neutral-900",
+    primary: "bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm",
+    primaryOutline: dark ? "border border-neutral-700 hover:bg-neutral-800 text-neutral-100" : "border border-neutral-300 hover:border-emerald-400 hover:bg-emerald-50 text-neutral-900",
+    divider: dark ? "border-neutral-800" : "border-neutral-200",
   };
   return { theme, setTheme, t };
 }
@@ -75,7 +115,7 @@ function useTheme() {
 
 function Badge({ children, tone = "default", t }) {
   const tones = {
-    default: t.dark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600",
+    default: t.dark ? "bg-neutral-800 text-neutral-300" : "bg-neutral-100 text-neutral-600",
     success: "bg-green-100 text-green-700",
     warn: "bg-orange-100 text-orange-700",
     danger: "bg-red-100 text-red-700",
@@ -119,7 +159,7 @@ function InfoRow({ t, label, value }) {
 }
 function BackBar({ t, onBack, label, disabled = false }) {
   return (
-    <button disabled={disabled} onClick={onBack} className={`mb-4 text-sm flex items-center gap-1.5 disabled:opacity-50 ${t.subtext} hover:text-blue-600`}>
+    <button disabled={disabled} onClick={onBack} className={`mb-4 text-sm flex items-center gap-1.5 disabled:opacity-50 ${t.subtext} hover:text-emerald-600`}>
       &larr; {label}
     </button>
   );
@@ -148,7 +188,7 @@ function StationSelect({ value, onChange, t, stations, excludeCode, label }) {
   return (
     <div className="relative" ref={ref}>
       <button type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)}
-        className={`w-full px-3.5 py-3 rounded-xl border text-left flex items-center gap-3 ${t.inputBg} hover:border-teal-400`}>
+        className={`w-full px-3.5 py-3 rounded-xl border text-left flex items-center gap-3 ${t.inputBg} hover:border-emerald-400`}>
         <span className="text-lg">{label === "From" ? "↗" : "↘"}</span>
         <span className="flex-1 min-w-0">
           <span className={`block text-[11px] uppercase tracking-[.16em] ${t.subtext}`}>{label || "Station"}</span>
@@ -169,9 +209,9 @@ function StationSelect({ value, onChange, t, stations, excludeCode, label }) {
             {options.length === 0 && <p className={`px-3 py-4 text-sm ${t.subtext}`}>No matching stations found.</p>}
             {options.map((s) => (
               <button key={s.station_code} type="button" role="option" aria-selected={value === s.station_code} onClick={() => choose(s)}
-                className={`w-full px-3 py-2.5 rounded-xl text-left flex items-center justify-between hover:bg-teal-500/10 ${value === s.station_code ? "bg-teal-500/10" : ""}`}>
+                className={`w-full px-3 py-2.5 rounded-xl text-left flex items-center justify-between hover:bg-emerald-500/10 ${value === s.station_code ? "bg-emerald-500/10" : ""}`}>
                 <span><span className={`block text-sm font-semibold ${t.text}`}>{s.station_name}</span><span className={`block text-xs ${t.subtext}`}>{s.city}</span></span>
-                <span className="text-[10px] font-bold tracking-wider text-teal-600">{s.station_code}</span>
+                <span className="text-[10px] font-bold tracking-wider text-emerald-600">{s.station_code}</span>
               </button>
             ))}
           </div>
@@ -207,13 +247,13 @@ function NavBar({ page, go, t, setTheme, currentUser, logout, logoutPending }) {
     <header className={`sticky top-0 z-30 border-b ${t.navBg}`}>
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
         <button className="flex items-center gap-2 font-semibold" onClick={() => go("home")}>
-          <div className="w-8 h-8 rounded-md bg-blue-800 flex items-center justify-center text-white text-sm">&#128646;</div>
+          <div className="w-8 h-8 rounded-md bg-neutral-900 dark:bg-emerald-600 flex items-center justify-center text-white text-sm">&#128646;</div>
           <span className={t.text}>BD Railway</span>
         </button>
 
         <nav className="hidden md:flex items-center gap-6">
           {links.map((l) => (
-            <button key={l.key} onClick={() => go(l.key)} className={`text-sm font-medium ${page === l.key ? "text-blue-600" : t.subtext} hover:text-blue-600`}>
+            <button key={l.key} onClick={() => go(l.key)} className={`text-sm font-medium ${page === l.key ? "text-emerald-600" : t.subtext} hover:text-emerald-600`}>
               {l.label}
             </button>
           ))}
@@ -232,9 +272,9 @@ function NavBar({ page, go, t, setTheme, currentUser, logout, logoutPending }) {
               </button>
               {menuOpen && (
                 <div className={`absolute right-0 mt-2 w-44 rounded-md border shadow-lg py-1 ${t.cardBg}`} onMouseLeave={() => setMenuOpen(false)}>
-                  <button onClick={() => { go("mybookings"); setMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-600/10 ${t.text}`}>My Bookings</button>
-                  {currentUser.role === "admin" && <button onClick={() => { go("admin"); setMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-600/10 ${t.text}`}>Admin Dashboard</button>}
-                  <button onClick={() => { go("account"); setMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-600/10 ${t.text}`}>Profile</button>
+                  <button onClick={() => { go("mybookings"); setMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-emerald-600/10 ${t.text}`}>My Bookings</button>
+                  {currentUser.role === "admin" && <button onClick={() => { go("admin"); setMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-emerald-600/10 ${t.text}`}>Admin Dashboard</button>}
+                  <button onClick={() => { go("account"); setMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-emerald-600/10 ${t.text}`}>Profile</button>
                   <button disabled={logoutPending} onClick={() => { logout(); setMenuOpen(false); }} className="w-full text-left px-3 py-2 text-sm text-red-500 hover:bg-red-500/10 disabled:opacity-50">{logoutPending ? "Logging out…" : "Logout"}</button>
                 </div>
               )}
@@ -261,7 +301,7 @@ function NavBar({ page, go, t, setTheme, currentUser, logout, logoutPending }) {
               <button disabled={logoutPending} onClick={() => { logout(); setOpen(false); }} className="text-left text-sm font-medium text-red-500 disabled:opacity-50">{logoutPending ? "Logging out…" : "Logout"}</button>
             </>
           ) : (
-            <button onClick={() => { go("login"); setOpen(false); }} className="text-left text-sm font-medium text-blue-600">Login</button>
+            <button onClick={() => { go("login"); setOpen(false); }} className="text-left text-sm font-medium text-emerald-600">Login</button>
           )}
           <button onClick={() => setTheme((th) => (th === "light" ? "dark" : "light"))} className={`self-start px-3 py-1.5 rounded-md text-sm ${t.primaryOutline}`}>
             {t.dark ? "Light mode" : "Dark mode"}
@@ -313,30 +353,28 @@ function HomePage({ t, search, setSearch, doSearch, searchError, stations, class
   ];
   return (
     <div>
-      <section className={`${t.hero} hero-grid relative overflow-hidden text-white`}>
-        <div className="absolute -right-24 -top-32 h-96 w-96 rounded-full bg-teal-400/20 blur-3xl" />
-        <div className="absolute -left-28 bottom-0 h-80 w-80 rounded-full bg-cyan-500/15 blur-3xl" />
-        <div className="max-w-6xl mx-auto px-4 pt-14 pb-28 md:pt-20 md:pb-36 relative">
+      <section className={`${t.hero} relative overflow-hidden text-white border-b border-neutral-800`}>
+        <div className="max-w-6xl mx-auto px-4 pt-14 pb-24 md:pt-20 md:pb-28 relative">
           <div className="max-w-3xl float-in">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold tracking-wide text-teal-100"><span className="h-2 w-2 rounded-full bg-teal-300" /> YOUR NEXT JOURNEY STARTS HERE</div>
-            <h1 className="mt-6 text-4xl md:text-6xl font-black leading-[1.05] tracking-tight">Go further.<br /><span className="text-teal-300">Feel closer.</span></h1>
-            <p className="mt-5 max-w-xl text-base md:text-lg leading-relaxed text-slate-300">A smarter, smoother way to discover Bangladesh by rail. Find a train, choose your seat, and book the journey in a few easy steps.</p>
-            <div className="mt-7 flex flex-wrap gap-5 text-sm text-slate-300"><span>✦ Live seat availability</span><span>✦ Secure booking holds</span><span>✦ Digital tickets</span></div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold tracking-wide text-emerald-300"><span className="h-2 w-2 rounded-full bg-emerald-400" /> YOUR NEXT JOURNEY STARTS HERE</div>
+            <h1 className="mt-6 text-4xl md:text-6xl font-black leading-[1.05] tracking-tight">Go further.<br /><span className="text-emerald-400">Feel closer.</span></h1>
+            <p className="mt-5 max-w-xl text-base md:text-lg leading-relaxed text-neutral-300">A smarter, smoother way to discover Bangladesh by rail. Find a train, choose your seat, and book the journey in a few easy steps.</p>
+            <div className="mt-7 flex flex-wrap gap-5 text-sm text-neutral-300"><span>✦ Live seat availability</span><span>✦ Secure booking holds</span><span>✦ Digital tickets</span></div>
           </div>
         </div>
       </section>
-      <div className="max-w-5xl mx-auto px-4 -mt-20 md:-mt-24 relative z-10">
+      <div className="max-w-5xl mx-auto px-4 -mt-16 md:-mt-20 relative z-10">
         <SearchCard t={t} search={search} setSearch={setSearch} onSubmit={doSearch} error={searchError} stations={stations} classTypes={classTypes} />
       </div>
       <section className="max-w-6xl mx-auto px-4 pt-20 pb-14">
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
-          <div><p className="text-sm font-bold uppercase tracking-[.2em] text-teal-600">How it works</p><h2 className={`mt-2 text-3xl font-black ${t.text}`}>Your trip, made simple</h2></div>
+          <div><p className="text-sm font-bold uppercase tracking-[.2em] text-emerald-600">How it works</p><h2 className={`mt-2 text-3xl font-black ${t.text}`}>Your trip, made simple</h2></div>
           <p className={`max-w-sm text-sm leading-relaxed ${t.subtext}`}>From your first search to the final ticket, everything you need is in one clear flow.</p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {steps.map(([number, title, copy], index) => (
-            <div key={number} className={`relative rounded-2xl border p-5 ${t.cardBg} ${index === 0 ? "ring-2 ring-teal-400/20" : ""}`}>
-              <div className="flex items-center justify-between"><span className="text-3xl font-black text-teal-500/30">{number}</span><span className={`h-9 w-9 rounded-xl flex items-center justify-center ${t.cardAltBg} text-teal-600`}>{["⌕", "▦", "♙", "✓"][index]}</span></div>
+            <div key={number} className={`relative rounded-2xl border p-5 ${t.cardBg} ${index === 0 ? "ring-1 ring-emerald-400/30" : ""}`}>
+              <div className="flex items-center justify-between"><span className="text-3xl font-black text-emerald-500/25">{number}</span><span className={`h-9 w-9 rounded-xl flex items-center justify-center ${t.cardAltBg} text-emerald-600`}>{["⌕", "▦", "♙", "✓"][index]}</span></div>
               <h3 className={`mt-5 font-bold ${t.text}`}>{title}</h3><p className={`mt-2 text-sm leading-relaxed ${t.subtext}`}>{copy}</p>
             </div>
           ))}
@@ -403,10 +441,10 @@ function LoginPage({ t, pendingSearch, onLogin, stations }) {
           {loading ? "Please wait…" : mode === "login" ? "Login" : "Create Account"}
         </PrimaryButton>
         <div className="flex justify-between text-sm">
-          <button type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }} className="text-blue-600 hover:underline">
+          <button type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }} className="text-emerald-600 hover:underline">
             {mode === "login" ? "Create Account" : "Back to Login"}
           </button>
-          {mode === "login" && <button type="button" className="text-blue-600 hover:underline" onClick={() => setError("Password reset is not available in this demonstration yet. Please contact an administrator.")}>Forgot Password?</button>}
+          {mode === "login" && <button type="button" className="text-emerald-600 hover:underline" onClick={() => setError("Password reset is not available in this demonstration yet. Please contact an administrator.")}>Forgot Password?</button>}
         </div>
         {mode === "login" && (
           <p className={`text-xs ${t.subtext} pt-2 border-t ${t.divider}`}>Customers and administrators use this same sign-in form. Demo customer: <b>rahim@example.com</b> / <b>password123</b>.</p>
@@ -493,7 +531,7 @@ function CoachPage({ t, go, ctx }) {
       <h2 className={`mt-6 mb-3 font-semibold ${t.text}`}>Select Coach</h2>
       <div className="flex flex-wrap gap-3">
         {data.coaches.map((c) => (
-          <button key={c.coach_id} onClick={() => go("seats", { coach: c, trainName: data.trip.train_name, date: data.trip.departure_date })} className={`px-6 py-4 rounded-lg border font-semibold ${t.cardBg} ${t.text} hover:border-blue-600`}>
+          <button key={c.coach_id} onClick={() => go("seats", { coach: c, trainName: data.trip.train_name, date: data.trip.departure_date })} className={`px-6 py-4 rounded-lg border font-semibold ${t.cardBg} ${t.text} hover:border-emerald-600`}>
             Coach {c.coach_number}
           </button>
         ))}
@@ -528,8 +566,8 @@ function SeatsPage({ t, go, ctx }) {
       <JourneySummary t={t} trainName={ctx.trainName} fromCity={ctx.search.fromCity} toCity={ctx.search.toCity} date={ctx.date} klass={ctx.klass} coachNumber={ctx.coach.coach_number} fare={ctx.fare} />
       <h2 className={`mt-6 mb-3 font-semibold ${t.text}`}>Select Seat(s) — Coach {ctx.coach.coach_number}</h2>
       <div className="flex gap-4 text-xs mb-4">
-        <span className={`flex items-center gap-1.5 ${t.subtext}`}><span className="w-3 h-3 rounded-sm bg-slate-300 inline-block" /> Available</span>
-        <span className={`flex items-center gap-1.5 ${t.subtext}`}><span className="w-3 h-3 rounded-sm bg-blue-600 inline-block" /> Selected</span>
+        <span className={`flex items-center gap-1.5 ${t.subtext}`}><span className="w-3 h-3 rounded-sm bg-neutral-300 inline-block" /> Available</span>
+        <span className={`flex items-center gap-1.5 ${t.subtext}`}><span className="w-3 h-3 rounded-sm bg-emerald-600 inline-block" /> Selected</span>
         <span className={`flex items-center gap-1.5 ${t.subtext}`}><span className="w-3 h-3 rounded-sm bg-orange-400 inline-block" /> Held / Sold</span>
       </div>
       <div className={`rounded-xl border p-4 space-y-2 ${t.cardBg}`}>
@@ -538,8 +576,8 @@ function SeatsPage({ t, go, ctx }) {
             {row.map((seat, idx) => {
               const isSel = selected.includes(seat.seat_id);
               const cls = seat.taken ? "bg-orange-400 text-white cursor-not-allowed opacity-70"
-                : isSel ? "bg-blue-600 text-white"
-                : `${t.cardAltBg} ${t.text} hover:border-blue-600`;
+                : isSel ? "bg-emerald-600 text-white"
+                : `${t.cardAltBg} ${t.text} hover:border-emerald-600`;
               return (
                 <React.Fragment key={seat.seat_id}>
                   <button disabled={seat.taken} onClick={() => toggle(seat)} className={`w-11 h-11 rounded-md border text-xs font-semibold flex items-center justify-center ${cls}`}>{seat.seat_number}</button>
@@ -716,7 +754,7 @@ function PaymentPage({ t, go, ctx, stations }) {
         <h3 className={`font-semibold mb-3 ${t.text}`}>Payment Method</h3>
         <div className="flex gap-3 flex-wrap">
           {["bKash", "Nagad", "Card"].map((m) => (
-            <button key={m} onClick={() => setMethod(m)} className={`px-4 py-2 rounded-md border text-sm font-medium ${method === m ? "border-blue-600 text-blue-600" : `${t.cardAltBg} ${t.text}`}`}>{m}</button>
+            <button key={m} onClick={() => setMethod(m)} className={`px-4 py-2 rounded-md border text-sm font-medium ${method === m ? "border-emerald-600 text-emerald-600" : `${t.cardAltBg} ${t.text}`}`}>{m}</button>
           ))}
         </div>
         <label className={`flex items-center gap-2 mt-4 text-xs ${t.subtext}`}>
@@ -805,7 +843,7 @@ function MyBookingsPage({ t, go }) {
   const Row = ({ b }) => {
     const tone = b.effective_status === "confirmed" ? "success" : b.effective_status === "pending" ? "warn" : "danger";
     return (
-      <button onClick={() => openBooking(b)} className={`w-full text-left rounded-xl border p-4 flex items-center justify-between ${t.cardBg} hover:border-blue-600`}>
+      <button onClick={() => openBooking(b)} className={`w-full text-left rounded-xl border p-4 flex items-center justify-between ${t.cardBg} hover:border-emerald-600`}>
         <div>
           <p className={`font-medium ${t.text}`}>{b.starts_at_station} → {b.ends_at_station}</p>
           <p className={`text-xs ${t.subtext}`}>PNR {b.pnr_number} · ৳{b.fare} · {fmtDate(b.booking_date)}</p>
@@ -936,7 +974,7 @@ function AdminPage({ t, currentUser }) {
                 <td className="p-3"><Badge t={t} tone={u.role === "admin" ? "success" : "default"}>{u.role}</Badge></td>
                 <td className="p-3">
                   {u.user_id === currentUser.user_id ? <span className={t.subtext}>Protected</span> : (
-                    <button disabled={saving === `role-${u.user_id}`} onClick={() => changeRole(u, u.role === "admin" ? "customer" : "admin")} className="text-blue-600 hover:underline disabled:opacity-50">
+                    <button disabled={saving === `role-${u.user_id}`} onClick={() => changeRole(u, u.role === "admin" ? "customer" : "admin")} className="text-emerald-600 hover:underline disabled:opacity-50">
                       {saving === `role-${u.user_id}` ? "Saving…" : u.role === "admin" ? "Make customer" : "Make admin"}
                     </button>
                   )}
@@ -1060,7 +1098,7 @@ function ContactPage({ t }) {
 
 function App() {
   const { theme, setTheme, t } = useTheme();
-  const [page, setPage] = useState("home");
+  const [page, setPage] = useState(pageFromLocation);
   const [currentUser, setCurrentUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [pendingSearch, setPendingSearch] = useState(null);
@@ -1076,6 +1114,54 @@ function App() {
     api("/auth/me").then((d) => setCurrentUser(d.user)).catch(() => setCurrentUser(null)).finally(() => setAuthChecked(true));
   }, []);
 
+  const go = (p, patch, opts = {}) => {
+    setCtx((c) => ({ ...c, ...(patch || {}) }));
+    setPage(p);
+    // Keep the address bar in sync with in-app navigation so every page the
+    // app can show also has a real, bookmarkable/shareable URL.
+    const path = ROUTE_PATHS[p] || "/";
+    if (window.location.pathname !== path) {
+      if (opts.replace) window.history.replaceState({}, "", path);
+      else window.history.pushState({}, "", path);
+    }
+    window.scrollTo(0, 0);
+  };
+
+  // Support the browser's Back/Forward buttons.
+  useEffect(() => {
+    const onPopState = () => setPage(pageFromLocation());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  // Route guard: runs whenever the page or auth state changes, and is the
+  // enforcement point for "no admin page without authorization". It redirects
+  // (rather than merely hiding content) so a customer typing /admin directly
+  // into the address bar — not just clicking a hidden nav link — never lands
+  // on the admin dashboard. The admin API itself is independently protected
+  // server-side (requireAuth + a fresh DB role check in requireAdmin), so
+  // this is defense in depth, not the only guard.
+  useEffect(() => {
+    if (!authChecked) return;
+    if (AUTH_ONLY_PAGES.has(page) && !currentUser) {
+      go("login", {}, { replace: true });
+      return;
+    }
+    if (ADMIN_ONLY_PAGES.has(page) && currentUser?.role !== "admin") {
+      go("home", {}, { replace: true });
+      return;
+    }
+    if (CONTEXT_ONLY_PAGES.has(page)) {
+      const missing =
+        (page === "coach" && !ctx.tripId) ||
+        (page === "seats" && !ctx.coach) ||
+        (page === "passenger" && !ctx.seats) ||
+        ((page === "payment" || page === "ticket") && !ctx.booking);
+      if (missing) go("home", {}, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, authChecked, currentUser?.user_id, currentUser?.role]);
+
   // Restore an in-progress payment after a browser refresh. A PNR in
   // sessionStorage is only a pointer; the API enforces the actual ownership.
   useEffect(() => {
@@ -1089,17 +1175,10 @@ function App() {
           sessionStorage.removeItem(PENDING_BOOKING_KEY);
           return;
         }
-        setCtx({ booking: full, fromMyBookings: false });
-        setPage("payment");
+        go("payment", { booking: full, fromMyBookings: false }, { replace: true });
       })
       .catch(() => sessionStorage.removeItem(PENDING_BOOKING_KEY));
   }, [authChecked, currentUser?.user_id]);
-
-  const go = (p, patch) => {
-    setCtx((c) => ({ ...c, ...(patch || {}) }));
-    setPage(p);
-    window.scrollTo(0, 0);
-  };
 
   const validateSearch = () => {
     if (!search.from || !search.to) return "Please choose both a departure and destination station.";
@@ -1147,7 +1226,7 @@ function App() {
 
   let body;
   if (!authChecked) {
-    body = <div className="max-w-4xl mx-auto px-4 py-16 text-center text-sm text-slate-400">Loading…</div>;
+    body = <div className="max-w-4xl mx-auto px-4 py-16 text-center text-sm text-neutral-400">Loading…</div>;
   } else if (page === "home") {
     body = <HomePage t={t} search={search} setSearch={setSearch} doSearch={doSearch} searchError={searchError} stations={stations} classTypes={classTypes} />;
   } else if (page === "login") {
@@ -1191,7 +1270,9 @@ function App() {
       </div>
     );
   } else {
-    body = <HomePage t={t} search={search} setSearch={setSearch} doSearch={doSearch} searchError={searchError} stations={stations} classTypes={classTypes} />;
+    // Unknown or not-yet-authorized page: render nothing while the guard
+    // effect above redirects, instead of silently falling back to Home.
+    body = <div className="max-w-4xl mx-auto px-4 py-16 text-center text-sm text-neutral-400">Loading…</div>;
   }
 
   return (
