@@ -11,6 +11,8 @@
     "migrate:roles": "node database/run-sql.js database/migrations/001_add_user_roles.sql",
     "migrate:auth-sessions": "node database/run-sql.js database/migrations/002_add_auth_sessions.sql",
     "migrate:constraints": "node database/run-sql.js database/migrations/003_add_domain_constraints.sql",
+    "migrate:train-schedule": "node database/run-sql.js database/migrations/004_add_train_station_schedule.sql",
+    "migrate:seed-train-times": "node database/run-sql.js database/migrations/005_set_seed_train_times.sql",
     "seed": "node database/seed.js"
   },
   "dependencies": {

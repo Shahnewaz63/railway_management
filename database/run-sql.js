@@ -2,7 +2,9 @@
 // connection settings as the server and seed scripts.
 require("dotenv").config();
 const { spawnSync } = require("child_process");
+const fs = require("fs");
 const path = require("path");
+const { Pool } = require("pg");
 
 const sqlFile = process.argv[2];
 if (!process.env.DATABASE_URL) {
@@ -21,7 +23,16 @@ const result = spawnSync(
 );
 
 if (result.error) {
-  console.error(`Could not run psql: ${result.error.message}`);
-  process.exit(1);
+  if (result.error.code !== "ENOENT") {
+    console.error(`Could not run psql: ${result.error.message}`);
+    process.exit(1);
+  }
+  // Keep migrations usable on systems with the app's PostgreSQL driver but
+  // without the optional psql command line client.
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.DATABASE_URL.includes("localhost") ? false : { rejectUnauthorized: false } });
+  pool.query(fs.readFileSync(path.resolve(sqlFile), "utf8"))
+    .then(() => console.log(`Applied ${path.basename(sqlFile)}.`))
+    .catch((err) => { console.error(`Could not apply ${path.basename(sqlFile)}: ${err.message}`); process.exitCode = 1; })
+    .finally(() => pool.end());
 }
-process.exit(result.status ?? 1);
+if (!result.error) process.exit(result.status ?? 1);

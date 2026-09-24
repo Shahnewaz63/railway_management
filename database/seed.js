@@ -29,6 +29,7 @@ const TRAIN_DEFS = [
   {
     name: "Subarna Express",
     route: "Dhaka - Chittagong Main Line",
+    start: "07:00",
     coaches: [
       { number: 1, type: "Shuvon Chair", capacity: 60 },
       { number: 2, type: "Shuvon Chair", capacity: 60 },
@@ -39,6 +40,7 @@ const TRAIN_DEFS = [
   {
     name: "Mohanagar Godhuli",
     route: "Dhaka - Chittagong Main Line",
+    start: "15:00",
     coaches: [
       { number: 1, type: "Shuvon Chair", capacity: 60 },
       { number: 2, type: "Snigdha", capacity: 44 },
@@ -47,6 +49,7 @@ const TRAIN_DEFS = [
   {
     name: "Parabat Express",
     route: "Dhaka - Sylhet Line",
+    start: "06:20",
     coaches: [
       { number: 1, type: "Shuvon Chair", capacity: 55 },
       { number: 2, type: "Snigdha", capacity: 40 },
@@ -56,6 +59,7 @@ const TRAIN_DEFS = [
   {
     name: "Silk City Express",
     route: "Dhaka - Rajshahi Line",
+    start: "14:30",
     coaches: [
       { number: 1, type: "Shuvon Chair", capacity: 58 },
       { number: 2, type: "Snigdha", capacity: 42 },
@@ -64,6 +68,7 @@ const TRAIN_DEFS = [
   {
     name: "Sundarban Express",
     route: "Dhaka - Khulna Line",
+    start: "08:15",
     coaches: [
       { number: 1, type: "Shuvon Chair", capacity: 58 },
       { number: 2, type: "Snigdha", capacity: 42 },
@@ -109,7 +114,23 @@ async function run() {
     for (const td of TRAIN_DEFS) {
       const tRes = await client.query("INSERT INTO train (train_name) VALUES ($1) RETURNING train_id", [td.name]);
       const train_id = tRes.rows[0].train_id;
-      trains.push({ train_id, route_id: routeIds[td.route] });
+      trains.push({ train_id, route_id: routeIds[td.route], route: td.route, start: td.start });
+
+      const stops = ROUTE_DEFS.find((r) => r.name === td.route).stops;
+      const [startHour, startMinute] = td.start.split(":").map(Number);
+      const startMinutes = startHour * 60 + startMinute;
+      for (let i = 0; i < stops.length; i++) {
+        const [stationCode] = stops[i];
+        const at = startMinutes + i * 120;
+        const fmt = (mins) => `${String(Math.floor((mins % 1440) / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}:00`;
+        const arrival = i === 0 ? fmt(at) : fmt(at - 10);
+        const departure = i === stops.length - 1 ? fmt(at) : fmt(at + 10);
+        await client.query(
+          `INSERT INTO train_station_schedule (train_id, route_id, station_code, arrival_time, departure_time)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [train_id, routeIds[td.route], stationCode, arrival, departure]
+        );
+      }
 
       for (const c of td.coaches) {
         const cRes = await client.query(

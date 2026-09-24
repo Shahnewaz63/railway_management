@@ -3,7 +3,12 @@ const bcrypt = require("bcrypt");
 const pool = require("../db/pool");
 const { requireAuth, requireAdmin } = require("../middleware/auth");
 const { HOLD_MINUTES } = require("../config/fares");
-const { normalizePnr, parsePositiveId } = require("../lib/request-validation");
+const {
+  normalizePnr,
+  parsePositiveId,
+  normalizePassengerName,
+  parsePassengerAge,
+} = require("../lib/request-validation");
 
 router.use(requireAuth, requireAdmin);
 
@@ -174,6 +179,68 @@ router.patch("/bookings/:pnr/cancel", async (req, res, next) => {
     if (!rows.length) {
       return res.status(409).json({ error: "Only pending or confirmed bookings can be cancelled." });
     }
+    res.json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Ticket-level view across every booking (past and present), for support and
+// data-entry corrections — the admin dashboard's "All Tickets" panel.
+router.get("/tickets", async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT tk.ticket_id, tk.pnr_number, tk.passenger_name, tk.passenger_age, tk.price,
+              s.seat_id, s.seat_number, c.coach_id, c.coach_number, c.coach_type,
+              t.trip_id, t.departure_date, tr.train_name,
+              b.booking_status, b.starts_at_station, b.ends_at_station, b.booking_date,
+              u.user_id, u.first_name, u.last_name, u.email
+       FROM ticket tk
+       JOIN seat s ON s.seat_id = tk.seat_id
+       JOIN coach c ON c.coach_id = s.coach_id
+       JOIN trip t ON t.trip_id = tk.trip_id
+       JOIN train tr ON tr.train_id = t.train_id
+       JOIN booking b ON b.pnr_number = tk.pnr_number
+       JOIN users u ON u.user_id = b.user_id
+       ORDER BY b.booking_date DESC, tk.ticket_id`
+    );
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Corrects passenger details on an existing ticket — e.g. a misspelled name
+// or a wrong age entered at booking time. Deliberately narrow: it does not
+// touch seat assignment, fare, or booking status, which each have their own
+// dedicated, availability-aware flows elsewhere.
+router.patch("/tickets/:ticketId", async (req, res, next) => {
+  const ticketId = parsePositiveId(req.params.ticketId);
+  if (!ticketId) return res.status(400).json({ error: "Invalid ticket." });
+
+  const updates = {};
+  if (req.body?.passenger_name !== undefined) {
+    const name = normalizePassengerName(req.body.passenger_name);
+    if (!name) return res.status(400).json({ error: "Please provide a valid passenger name." });
+    updates.passenger_name = name;
+  }
+  if (req.body?.passenger_age !== undefined) {
+    const age = parsePassengerAge(req.body.passenger_age);
+    if (!age) return res.status(400).json({ error: "Please provide a valid passenger age." });
+    updates.passenger_age = age;
+  }
+  if (!Object.keys(updates).length) {
+    return res.status(400).json({ error: "Nothing to update." });
+  }
+
+  try {
+    const setClauses = Object.keys(updates).map((key, i) => `${key} = $${i + 2}`).join(", ");
+    const { rows } = await pool.query(
+      `UPDATE ticket SET ${setClauses} WHERE ticket_id = $1
+       RETURNING ticket_id, pnr_number, passenger_name, passenger_age`,
+      [ticketId, ...Object.values(updates)]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Ticket not found." });
     res.json(rows[0]);
   } catch (err) {
     next(err);

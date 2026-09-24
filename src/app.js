@@ -10,12 +10,20 @@ const bookingRoutes = require("./routes/bookings");
 const classRoutes = require("./routes/classes");
 const adminRoutes = require("./routes/admin");
 const errorHandler = require("./middleware/errorHandler");
+const { hideApiFromDirectBrowsing } = require("./middleware/apiVisibility");
 
 const app = express();
 // The frontend is served by this same Express application. Avoiding a wide
 // open CORS policy prevents other origins from invoking cookie-authenticated
 // endpoints in a browser.
 app.use(express.json({ limit: "100kb" }));
+
+// Applies to every /api/* route below: makes the API invisible to someone
+// typing its URL directly into the browser (or following a link to it)
+// unless they're a signed-in admin. See middleware/apiVisibility.js for what
+// this does and does not protect against — the real access control is
+// unchanged and lives in requireAuth/requireAdmin per route.
+app.use("/api", hideApiFromDirectBrowsing);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/stations", stationRoutes);

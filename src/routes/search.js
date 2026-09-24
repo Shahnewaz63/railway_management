@@ -19,9 +19,28 @@ router.get("/", async (req, res, next) => {
     // A trip only serves this journey if its route contains both stations
     // with the origin's stop_order strictly before the destination's.
     const tripsRes = await pool.query(
-      `SELECT t.trip_id, t.train_id, t.route_id, t.departure_date, t.status, tr.train_name
+      `SELECT t.trip_id, t.train_id, t.route_id, t.departure_date, t.status, tr.train_name,
+              sf.departure_time AS origin_departure_time,
+              st.arrival_time AS destination_arrival_time,
+              to_char(t.departure_date::date + sf.departure_time, 'YYYY-MM-DD"T"HH24:MI:SS') AS origin_departure,
+              to_char(t.departure_date::date + st.arrival_time
+                + CASE WHEN st.arrival_time < sf.departure_time THEN interval '1 day' ELSE interval '0 day' END,
+                'YYYY-MM-DD"T"HH24:MI:SS') AS destination_arrival,
+              sf.station_code AS origin_station_code, st.station_code AS destination_station_code, route_info.stops
        FROM trip t
        JOIN train tr ON tr.train_id = t.train_id
+       JOIN train_station_schedule sf ON sf.train_id = t.train_id AND sf.route_id = t.route_id AND sf.station_code = $1
+       JOIN train_station_schedule st ON st.train_id = t.train_id AND st.route_id = t.route_id AND st.station_code = $2
+       LEFT JOIN LATERAL (
+         SELECT json_agg(json_build_object(
+           'station_code', rs.station_code, 'station_name', s.station_name, 'city', s.city,
+           'arrival_time', sch.arrival_time, 'departure_time', sch.departure_time
+         ) ORDER BY rs.stop_order) AS stops
+         FROM route_station rs
+         JOIN station s ON s.station_code = rs.station_code
+         JOIN train_station_schedule sch ON sch.train_id = t.train_id AND sch.route_id = t.route_id AND sch.station_code = rs.station_code
+         WHERE rs.route_id = t.route_id
+       ) route_info ON true
        WHERE t.status = 'scheduled'
          AND t.departure_date::date = $3::date
          AND EXISTS (
@@ -32,7 +51,7 @@ router.get("/", async (req, res, next) => {
              AND rs_to.station_code = $2
              AND rs_from.stop_order < rs_to.stop_order
          )
-       ORDER BY t.departure_date`,
+       ORDER BY t.departure_date::date + sf.departure_time`,
       [from, to, date]
     );
 

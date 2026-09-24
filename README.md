@@ -9,7 +9,7 @@ A working full-stack prototype: **Express + PostgreSQL** backend, plain **React*
 database/
   schema.sql     DDL — matches the ER diagram exactly, plus one additive user_auth table
   seed.js        populates stations/routes/trains/coaches/seats/trips + a demo user
-  migrations/    additive migrations for existing databases
+migrations/    additive migrations for existing databases
 src/
   db/pool.js             pg connection pool
   config/fares.js        FARES + CLASS_INFO (app-level, since there's no fare table)
@@ -28,6 +28,10 @@ public/
   index.html      loads React/Babel from CDN
   app.jsx         the whole frontend (fetches the API above)
 ```
+
+For an existing database, apply train stop times with `npm run migrate:train-schedule`
+followed by `npm run migrate:seed-train-times`. New databases get the schedule table
+from `database/schema.sql`; `database/seed.js` fills each seeded train's stop times.
 
 ## 1. Clone and install
 

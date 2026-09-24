@@ -29,6 +29,17 @@ CREATE TABLE train (
   train_name     VARCHAR(100) NOT NULL
 );
 
+-- Train-specific local arrival/departure times at every station on its route.
+CREATE TABLE train_station_schedule (
+  train_id       INT NOT NULL REFERENCES train(train_id) ON DELETE CASCADE,
+  route_id       INT NOT NULL REFERENCES route(route_id) ON DELETE CASCADE,
+  station_code   VARCHAR(10) NOT NULL,
+  arrival_time   TIME NOT NULL,
+  departure_time TIME NOT NULL,
+  PRIMARY KEY (train_id, station_code),
+  FOREIGN KEY (route_id, station_code) REFERENCES route_station(route_id, station_code) ON DELETE CASCADE
+);
+
 CREATE TABLE coach (
   coach_id       SERIAL PRIMARY KEY,
   train_id       INT NOT NULL REFERENCES train(train_id) ON DELETE CASCADE,

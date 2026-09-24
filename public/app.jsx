@@ -344,6 +344,57 @@ function SearchCard({ t, search, setSearch, onSubmit, error, stations, classType
 
 /* ============================== Pages ============================== */
 
+// Common origin/destination pairs, mirroring the "popular routes" shortcuts
+// on railway booking sites — a quick way in without typing station names.
+const POPULAR_ROUTES = [
+  ["DHK", "CTG"],
+  ["DHK", "SYL"],
+  ["DHK", "RAJ"],
+  ["DHK", "KHL"],
+];
+
+function StatStrip({ t, stations, classTypes }) {
+  const stats = [
+    [String(stations.length || "—"), "Stations served"],
+    [String(POPULAR_ROUTES.length), "Popular routes"],
+    [String(classTypes.length || "—"), "Travel classes"],
+    ["24/7", "Online booking"],
+  ];
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-px rounded-xl overflow-hidden border border-white/10 bg-white/10">
+      {stats.map(([value, label]) => (
+        <div key={label} className="bg-neutral-900 px-4 py-4 text-center">
+          <p className="text-2xl font-black text-white">{value}</p>
+          <p className="mt-1 text-xs text-neutral-400">{label}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PopularRoutes({ t, stations, onPick }) {
+  const cityOf = (code) => stations.find((s) => s.station_code === code)?.city || code;
+  if (!stations.length) return null;
+  return (
+    <section className="max-w-6xl mx-auto px-4 pb-16">
+      <div className="mb-6">
+        <p className="text-sm font-bold uppercase tracking-[.2em] text-emerald-600">Popular routes</p>
+        <h2 className={`mt-2 text-3xl font-black ${t.text}`}>Jump straight to a journey</h2>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {POPULAR_ROUTES.map(([from, to]) => (
+          <button key={`${from}-${to}`} onClick={() => onPick(from, to)}
+            className={`text-left rounded-2xl border p-5 transition-colors ${t.cardBg} hover:border-emerald-500`}>
+            <p className={`text-xs uppercase tracking-wide ${t.subtext}`}>Route</p>
+            <p className={`mt-1 font-bold ${t.text}`}>{cityOf(from)} <span className="text-emerald-600">→</span> {cityOf(to)}</p>
+            <p className={`mt-3 text-xs font-medium text-emerald-600`}>Search this route &rarr;</p>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function HomePage({ t, search, setSearch, doSearch, searchError, stations, classTypes }) {
   const steps = [
     ["01", "Pick your route", "Search by station, city, travel date and preferred class."],
@@ -351,6 +402,10 @@ function HomePage({ t, search, setSearch, doSearch, searchError, stations, class
     ["03", "Add passenger details", "Enter the name and age for every traveller."],
     ["04", "Pay & travel", "Complete the demo payment and keep your digital ticket handy."],
   ];
+  const pickRoute = (from, to) => {
+    setSearch((s) => ({ ...s, from, to }));
+    document.getElementById("search-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   return (
     <div>
       <section className={`${t.hero} relative overflow-hidden text-white border-b border-neutral-800`}>
@@ -359,14 +414,15 @@ function HomePage({ t, search, setSearch, doSearch, searchError, stations, class
             <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold tracking-wide text-emerald-300"><span className="h-2 w-2 rounded-full bg-emerald-400" /> YOUR NEXT JOURNEY STARTS HERE</div>
             <h1 className="mt-6 text-4xl md:text-6xl font-black leading-[1.05] tracking-tight">Go further.<br /><span className="text-emerald-400">Feel closer.</span></h1>
             <p className="mt-5 max-w-xl text-base md:text-lg leading-relaxed text-neutral-300">A smarter, smoother way to discover Bangladesh by rail. Find a train, choose your seat, and book the journey in a few easy steps.</p>
-            <div className="mt-7 flex flex-wrap gap-5 text-sm text-neutral-300"><span>✦ Live seat availability</span><span>✦ Secure booking holds</span><span>✦ Digital tickets</span></div>
+            <div className="mt-7 max-w-xl"><StatStrip t={t} stations={stations} classTypes={classTypes} /></div>
           </div>
         </div>
       </section>
-      <div className="max-w-5xl mx-auto px-4 -mt-16 md:-mt-20 relative z-10">
+      <div id="search-card" className="max-w-5xl mx-auto px-4 -mt-16 md:-mt-20 relative z-10 scroll-mt-24">
         <SearchCard t={t} search={search} setSearch={setSearch} onSubmit={doSearch} error={searchError} stations={stations} classTypes={classTypes} />
       </div>
-      <section className="max-w-6xl mx-auto px-4 pt-20 pb-14">
+      <PopularRoutes t={t} stations={stations} onPick={pickRoute} />
+      <section className="max-w-6xl mx-auto px-4 pb-20">
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
           <div><p className="text-sm font-bold uppercase tracking-[.2em] text-emerald-600">How it works</p><h2 className={`mt-2 text-3xl font-black ${t.text}`}>Your trip, made simple</h2></div>
           <p className={`max-w-sm text-sm leading-relaxed ${t.subtext}`}>From your first search to the final ticket, everything you need is in one clear flow.</p>
@@ -459,6 +515,12 @@ function ResultsPage({ t, search, go, stations }) {
   const [error, setError] = useState("");
   const from = stations.find((s) => s.station_code === search.from);
   const to = stations.find((s) => s.station_code === search.to);
+  const clock = (value) => new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const shortDate = (value) => new Date(value).toLocaleDateString([], { day: "2-digit", month: "short" }).toUpperCase();
+  const duration = (start, end) => {
+    const mins = Math.max(0, Math.round((new Date(end) - new Date(start)) / 60000));
+    return `${String(Math.floor(mins / 60)).padStart(2, "0")}h ${String(mins % 60).padStart(2, "0")}m`;
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -491,15 +553,30 @@ function ResultsPage({ t, search, go, stations }) {
       <div className="space-y-4">
         {trips && trips.map((trip) => (
           <div key={trip.trip_id} className={`rounded-xl border p-5 ${t.cardBg}`}>
-            <h2 className={`font-semibold mb-3 ${t.text}`}>&#128646; {trip.train_name}</h2>
-            <div className="grid gap-2">
+            <h2 className="font-bold uppercase tracking-wide text-orange-500">{trip.train_name} <span className="font-normal text-slate-500">({trip.train_id})</span></h2>
+            <div className="my-4 grid grid-cols-[1fr_auto] items-center border-y -mx-5 px-5 py-3">
+              <div className="flex items-center gap-4">
+                <div className="w-24 shrink-0 text-right"><p className={`text-xs font-bold ${t.text}`}>{shortDate(trip.origin_departure)} · {clock(trip.origin_departure)}</p><p className={`text-sm ${t.subtext}`}>{from?.city || from?.station_name}</p></div>
+                <div className="min-w-12 flex-1 text-center"><div className="relative border-t-2 border-slate-200"><span className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 border-2 border-emerald-600 bg-white" /></div><p className={`mt-2 text-xs ${t.subtext}`}>{duration(trip.origin_departure, trip.destination_arrival)}</p></div>
+                <div className="w-24 shrink-0"><p className={`text-xs font-bold ${t.text}`}>{shortDate(trip.destination_arrival)} · {clock(trip.destination_arrival)}</p><p className={`text-sm ${t.subtext}`}>{to?.city || to?.station_name}</p></div>
+              </div>
+              <div className="border-l pl-4 text-center text-emerald-700"><div className="text-xl">⚑</div><span className="text-[11px] font-semibold">Train Details</span></div>
+            </div>
+            <details className="mb-3 text-xs text-slate-600">
+              <summary className="w-fit cursor-pointer font-semibold text-emerald-700">View all station times</summary>
+              <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 rounded-lg bg-slate-50 p-3">
+                {(trip.stops || []).map((stop) => <span key={stop.station_code}><b>{stop.city}</b> · Arr {String(stop.arrival_time).slice(0, 5)} / Dep {String(stop.departure_time).slice(0, 5)}</span>)}
+              </div>
+            </details>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {trip.classes.map((c) => (
-                <div key={c.coach_type} className={`flex items-center justify-between rounded-md border px-4 py-3 ${t.cardAltBg}`}>
+                <div key={c.coach_type} className={`flex min-h-36 flex-col justify-between rounded-md border px-3 py-3 ${c.available > 0 ? "border-emerald-700 bg-emerald-50/60" : "border-rose-100 bg-rose-50"}`}>
                   <div>
-                    <p className={`font-medium text-sm ${t.text}`}>{c.coach_type}</p>
-                    <p className={`text-xs ${c.available > 0 ? t.subtext : "text-red-500"}`}>{c.available > 0 ? `Available: ${c.available}` : "Sold Out"}</p>
+                    <p className="font-bold text-sm text-slate-700">{c.coach_type.toUpperCase()}</p>
+                    <p className="mt-1 text-[11px] leading-tight text-slate-600">Available Tickets<br />(Counter + Online)</p>
+                    <p className={`text-sm font-bold ${c.available > 0 ? "text-emerald-700" : "text-red-500"}`}>{c.available}</p>
                   </div>
-                  <div className="flex items-center gap-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-black/5 pt-2">
                     <span className={`text-sm font-semibold ${t.text}`}>৳{c.fare}</span>
                     <PrimaryButton t={t} disabled={c.available === 0} onClick={() => go("coach", { tripId: trip.trip_id, klass: c.coach_type, fare: c.fare })}>Book Now</PrimaryButton>
                   </div>
@@ -874,20 +951,50 @@ function AdminPage({ t, currentUser }) {
   const [summary, setSummary] = useState(null);
   const [users, setUsers] = useState(null);
   const [bookings, setBookings] = useState(null);
+  const [tickets, setTickets] = useState(null);
+  const [ticketFilter, setTicketFilter] = useState("");
+  const [editingTicket, setEditingTicket] = useState(null);
+  const [ticketEdit, setTicketEdit] = useState({ passenger_name: "", passenger_age: "" });
   const [error, setError] = useState("");
+  const [ticketError, setTicketError] = useState("");
   const [saving, setSaving] = useState("");
   const [newUser, setNewUser] = useState({ first_name: "", last_name: "", email: "", password: "", role: "customer" });
 
   const load = async () => {
     setError("");
     try {
-      const [nextSummary, nextUsers, nextBookings] = await Promise.all([
-        api("/admin/summary"), api("/admin/users"), api("/admin/bookings"),
+      const [nextSummary, nextUsers, nextBookings, nextTickets] = await Promise.all([
+        api("/admin/summary"), api("/admin/users"), api("/admin/bookings"), api("/admin/tickets"),
       ]);
       setSummary(nextSummary);
       setUsers(nextUsers);
       setBookings(nextBookings);
+      setTickets(nextTickets);
     } catch (e) { setError(e.message); }
+  };
+
+  const startEditTicket = (tk) => {
+    setTicketError("");
+    setEditingTicket(tk.ticket_id);
+    setTicketEdit({ passenger_name: tk.passenger_name, passenger_age: String(tk.passenger_age) });
+  };
+  const cancelEditTicket = () => { setEditingTicket(null); setTicketError(""); };
+  const saveTicket = async (ticketId) => {
+    setSaving(`ticket-${ticketId}`);
+    setTicketError("");
+    try {
+      const age = Number(ticketEdit.passenger_age);
+      if (!ticketEdit.passenger_name.trim() || !age || age <= 0) {
+        throw new Error("Please provide a valid name and age.");
+      }
+      await api(`/admin/tickets/${ticketId}`, {
+        method: "PATCH",
+        body: { passenger_name: ticketEdit.passenger_name.trim(), passenger_age: age },
+      });
+      setEditingTicket(null);
+      await load();
+    } catch (e) { setTicketError(e.message); }
+    finally { setSaving(""); }
   };
 
   useEffect(() => { load(); }, []);
@@ -1000,6 +1107,72 @@ function AdminPage({ t, currentUser }) {
                   {["pending", "confirmed"].includes(b.booking_status) ? <button disabled={saving === `booking-${b.pnr_number}`} onClick={() => cancelBooking(b.pnr_number)} className="text-red-500 hover:underline disabled:opacity-50">{saving === `booking-${b.pnr_number}` ? "Cancelling…" : "Cancel"}</button> : <span className={t.subtext}>—</span>}
                 </td>
               </tr>)}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className={`mt-8 rounded-xl border overflow-hidden ${t.cardBg}`}>
+        <div className="p-5 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h2 className={`font-semibold ${t.text}`}>All Tickets</h2>
+            <p className={`text-sm mt-1 ${t.subtext}`}>Every passenger ticket ever issued, across every booking. Correct a misspelled name or wrong age here.</p>
+          </div>
+          <input value={ticketFilter} onChange={(e) => setTicketFilter(e.target.value)} placeholder="Filter by PNR, name or train…"
+            className={`px-3 py-2 rounded-md border text-sm w-full sm:w-64 ${t.inputBg}`} />
+        </div>
+        <ErrorBanner message={ticketError} />
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className={t.cardAltBg}><tr><th className="p-3">PNR</th><th className="p-3">Passenger</th><th className="p-3">Journey</th><th className="p-3">Seat</th><th className="p-3">Status</th><th className="p-3">Action</th></tr></thead>
+            <tbody>
+              {!tickets && <tr><td colSpan="6" className={`p-4 ${t.subtext}`}>Loading tickets…</td></tr>}
+              {tickets && tickets.length === 0 && <tr><td colSpan="6" className={`p-4 ${t.subtext}`}>No tickets have been issued yet.</td></tr>}
+              {tickets && tickets
+                .filter((tk) => {
+                  const q = ticketFilter.trim().toLowerCase();
+                  if (!q) return true;
+                  return [tk.pnr_number, tk.passenger_name, tk.train_name, tk.first_name, tk.last_name]
+                    .some((v) => (v || "").toLowerCase().includes(q));
+                })
+                .map((tk) => {
+                  const editing = editingTicket === tk.ticket_id;
+                  return (
+                    <tr key={tk.ticket_id} className={`border-t ${t.divider}`}>
+                      <td className={`p-3 font-medium ${t.text}`}>{tk.pnr_number}</td>
+                      <td className="p-3">
+                        {editing ? (
+                          <div className="flex gap-2">
+                            <input value={ticketEdit.passenger_name} onChange={(e) => setTicketEdit((f) => ({ ...f, passenger_name: e.target.value }))}
+                              className={`w-32 px-2 py-1.5 rounded-md border text-sm ${t.inputBg}`} placeholder="Name" />
+                            <input type="number" min="1" value={ticketEdit.passenger_age} onChange={(e) => setTicketEdit((f) => ({ ...f, passenger_age: e.target.value }))}
+                              className={`w-16 px-2 py-1.5 rounded-md border text-sm ${t.inputBg}`} placeholder="Age" />
+                          </div>
+                        ) : (
+                          <>
+                            <p className={`font-medium ${t.text}`}>{tk.passenger_name}, {tk.passenger_age}y</p>
+                            <p className={t.subtext}>Booked by {tk.first_name} {tk.last_name}</p>
+                          </>
+                        )}
+                      </td>
+                      <td className={`p-3 ${t.subtext}`}>{tk.starts_at_station} → {tk.ends_at_station}<br />{tk.train_name}{tk.departure_date ? ` · ${fmtDate(tk.departure_date)}` : ""}</td>
+                      <td className={`p-3 ${t.subtext}`}>Coach {tk.coach_number} · {tk.seat_number}<br />{tk.coach_type}</td>
+                      <td className="p-3"><Badge t={t} tone={tk.booking_status === "confirmed" ? "success" : tk.booking_status === "pending" ? "warn" : "danger"}>{tk.booking_status}</Badge></td>
+                      <td className="p-3">
+                        {editing ? (
+                          <div className="flex gap-2">
+                            <button disabled={saving === `ticket-${tk.ticket_id}`} onClick={() => saveTicket(tk.ticket_id)} className="text-emerald-600 hover:underline disabled:opacity-50">
+                              {saving === `ticket-${tk.ticket_id}` ? "Saving…" : "Save"}
+                            </button>
+                            <button onClick={cancelEditTicket} className={t.subtext}>Cancel</button>
+                          </div>
+                        ) : (
+                          <button onClick={() => startEditTicket(tk)} className="text-emerald-600 hover:underline">Edit</button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
             </tbody>
           </table>
         </div>
