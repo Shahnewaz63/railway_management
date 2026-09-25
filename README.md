@@ -88,6 +88,9 @@ npm run migrate:roles
 npm run migrate:auth-sessions
 npm run migrate:constraints
 npm run migrate:password-reset
+npm run migrate:booking-integrity
+npm run migrate:reviews-refunds
+npm run migrate:wallet
 ```
 
 ## Gmail password reset
@@ -133,8 +136,10 @@ server or CORS setup to worry about.
 | POST | `/api/bookings`                          | ✓    | `{trip_id,coach_id,from,to,seats:[{seat_id,passenger_name,passenger_age}]}` — creates the pending booking + tickets, starts the 5-minute hold |
 | GET  | `/api/bookings`                          | ✓    | the logged-in user's bookings, with `effective_status` |
 | GET  | `/api/bookings/:pnr`                     | ✓    | full booking + tickets + payment |
-| POST | `/api/bookings/:pnr/pay`                 | ✓    | `{method}` — re-verifies the hold hasn't expired, then confirms |
+| POST | `/api/bookings/:pnr/pay`                 | ✓    | `{method}` (`bKash`, `Nagad`, `Card`, or `Wallet`) — re-verifies the hold, then confirms |
 | DELETE | `/api/bookings/:pnr`                   | ✓    | cancels the caller's pending hold and releases its seats |
+| GET  | `/api/wallet`                            | ✓    | wallet balance and latest transactions |
+| POST | `/api/wallet/top-ups`                    | ✓    | simulated top-up `{amount,method,reference_code?}` |
 
 All fares, seat availability, and booking status are computed server-side from
 the database on every request — the frontend never sends a price or an
@@ -171,6 +176,10 @@ cookie/token cannot be reused.
 
 - Payment is simulated (no real gateway) — the checkbox on the payment page
   lets you force a failed attempt to see that path.
+- Wallet top-ups are simulated ledger credits. They do not contact or verify
+  bKash, Nagad, card, or other payment providers; gateway integration requires
+  merchant credentials and provider callbacks before these credits can be
+  treated as real funds. Ticket refunds are credited to the in-app wallet.
 - The admin dashboard currently provides system counts only; management of
   trains/coaches/trips still uses `psql` or `database/seed.js`.
 - No rate limiting / refresh-token rotation; the HTTP-only session cookie lasts

@@ -56,6 +56,51 @@ function latestEligibleBirthDate() {
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+function BirthDateInput({ value, onChange, t, id = "dob" }) {
+  const cutoff = latestEligibleBirthDate();
+  const [maxY, maxM, maxD] = cutoff.split("-").map(Number);
+  const parseDob = (v) => {
+    if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+      const [y,m,d] = v.split("-").map(Number);
+      return {y,m,d};
+    }
+    return {y:0,m:0,d:0};
+  };
+  const init = parseDob(value);
+  const [sy, setSy] = useState(init.y);
+  const [sm, setSm] = useState(init.m);
+  const [sd, setSd] = useState(init.d);
+  useEffect(() => { const v = parseDob(value); setSy(v.y); setSm(v.m); setSd(v.d); }, [value]);
+  const dim = (y,m) => (y && m) ? new Date(y,m,0).getDate() : (m ? new Date(2000,m,0).getDate() : 31);
+  const capD = (sy === maxY && sm === maxM) ? Math.min(dim(sy,sm), maxD) : dim(sy,sm);
+  const emit = (y,m,d) => onChange((y&&m&&d) ? `${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}` : "");
+  const chgY = (e) => { let y=+e.target.value||0, m=sm, d=sd; if(y===maxY&&m>maxM) m=maxM; let c=dim(y,m); if(d>c)d=c; if(y===maxY&&m===maxM&&d>maxD)d=maxD; setSy(y);setSm(m);setSd(d);emit(y,m,d); };
+  const chgM = (e) => { let m=+e.target.value||0, d=sd; let c=dim(sy,m); if(d>c)d=c; if(sy===maxY&&m===maxM&&d>maxD)d=maxD; setSm(m);setSd(d);emit(sy,m,d); };
+  const chgD = (e) => { let d=+e.target.value||0; setSd(d); emit(sy,sm,d); };
+  const MN = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const yrs = []; for(let y=maxY;y>=1920;y--) yrs.push(y);
+  const days = []; for(let d=1;d<=capD;d++) days.push(d);
+  const cls = `w-full px-3 py-2.5 rounded-lg border text-sm cursor-pointer ${t.inputBg}`;
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      <select id={`${id}-d`} aria-label="Day" value={sd||""} onChange={chgD} required className={cls}>
+        <option value="">Day</option>
+        {days.map(d => <option key={d} value={d}>{String(d).padStart(2,"0")}</option>)}
+      </select>
+      <select id={`${id}-m`} aria-label="Month" value={sm||""} onChange={chgM} required className={cls}>
+        <option value="">Month</option>
+        {MN.map((n,i) => <option key={i+1} value={i+1} disabled={sy===maxY&&(i+1)>maxM}>{n}</option>)}
+      </select>
+      <select id={`${id}-y`} aria-label="Year" value={sy||""} onChange={chgY} required className={cls}>
+        <option value="">Year</option>
+        {yrs.map(y => <option key={y} value={y}>{y}</option>)}
+      </select>
+    </div>
+  );
+}
+
+
+
 /* ============================== Routing ============================== */
 
 // A small, dependency-free router: each "page" the app already tracks in
@@ -72,6 +117,7 @@ const ROUTE_PATHS = {
   payment: "/booking/payment",
   ticket: "/booking/ticket",
   mybookings: "/mybookings",
+  wallet: "/wallet",
   editprofile: "/account/edit",
   changepassword: "/account/change-password",
   admin: "/admin",
@@ -91,7 +137,7 @@ function pageFromLocation() {
 }
 
 // Pages that require *some* signed-in user.
-const AUTH_ONLY_PAGES = new Set(["mybookings", "admin", "account", "editprofile", "changepassword", "contact"]);
+const AUTH_ONLY_PAGES = new Set(["mybookings", "wallet", "admin", "account", "editprofile", "changepassword", "contact"]);
 // Pages that additionally require the administrator role.
 const ADMIN_ONLY_PAGES = new Set(["admin"]);
 const CUSTOMER_ONLY_PAGES = new Set(["contact"]);
@@ -275,7 +321,16 @@ function BrandMark({ t }) {
 function NavBar({ page, go, onAnchor, t, setTheme, currentUser, logout, logoutPending }) {
   const [open, setOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(null);
   const [scrolled, setScrolled] = useState(window.scrollY > 20);
+  useEffect(() => {
+    if (!currentUser) { setWalletBalance(null); return; }
+    let alive = true;
+    const refreshWallet = () => api("/wallet").then((data) => { if (alive) setWalletBalance(Number(data.balance)); }).catch(() => { if (alive) setWalletBalance(null); });
+    refreshWallet();
+    window.addEventListener("wallet-balance-updated", refreshWallet);
+    return () => { alive = false; window.removeEventListener("wallet-balance-updated", refreshWallet); };
+  }, [currentUser?.user_id]);
   useEffect(() => {
     const update = () => setScrolled(window.scrollY > 20);
     window.addEventListener("scroll", update, { passive: true });
@@ -317,11 +372,13 @@ function NavBar({ page, go, onAnchor, t, setTheme, currentUser, logout, logoutPe
               <button aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)} className={`flex items-center gap-2 px-3 py-2 rounded-lg ${t.primaryOutline}`}>
                 <span className="text-sm font-medium">{currentUser.first_name}</span>
                 <Badge t={t} tone={currentUser.role === "admin" ? "admin" : "customer"}>{currentUser.role === "admin" ? "Admin" : "Customer"}</Badge>
+                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${t.dark ? "bg-emerald-950/70 text-emerald-300" : "bg-emerald-50 text-emerald-800"}`}><span className="mr-1 opacity-70">৳</span>{walletBalance === null ? "—" : walletBalance.toFixed(2)}</span>
                 <span aria-hidden="true">&#9662;</span>
               </button>
               {menuOpen && (
                 <div className={`absolute right-0 mt-2 w-44 rounded-lg border shadow-lg py-1 ${t.cardBg}`} onMouseLeave={() => setMenuOpen(false)}>
                   <button onClick={() => { go("mybookings"); setMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-brand/10 ${t.text}`}>My Bookings</button>
+                  <button onClick={() => { go("wallet"); setMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-brand/10 ${t.text}`}>Wallet</button>
                   {currentUser.role === "admin" && <button onClick={() => { go("admin"); setMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-brand/10 ${t.text}`}>Admin Dashboard</button>}
                   <button onClick={() => { go("account"); setMenuOpen(false); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-brand/10 ${t.text}`}>Profile</button>
                   <button disabled={logoutPending} onClick={() => { logout(); setMenuOpen(false); }} className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50">{logoutPending ? "Logging out…" : "Logout"}</button>
@@ -345,6 +402,7 @@ function NavBar({ page, go, onAnchor, t, setTheme, currentUser, logout, logoutPe
           {currentUser ? (
             <>
               <p className={`flex items-center gap-2 text-xs ${t.subtext}`}>Signed in as <Badge t={t} tone={currentUser.role === "admin" ? "admin" : "customer"}>{currentUser.role === "admin" ? "Admin" : "Customer"}</Badge></p>
+              <button onClick={() => { go("wallet"); setOpen(false); }} className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm font-semibold ${t.text}`}><span>Wallet balance</span><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-800">৳{walletBalance === null ? "—" : walletBalance.toFixed(2)}</span></button>
               <button onClick={() => { go("mybookings"); setOpen(false); }} className={`text-left text-sm font-medium ${t.text}`}>My Bookings</button>
               <button onClick={() => { go("account"); setOpen(false); }} className={`text-left text-sm font-medium ${t.text}`}>Profile &amp; Security</button>
               {currentUser.role === "admin" && <button onClick={() => { go("admin"); setOpen(false); }} className={`text-left text-sm font-medium ${t.text}`}>Admin Dashboard</button>}
@@ -578,7 +636,7 @@ function LoginPage({ t, pendingSearch, onLogin, stations }) {
           <div className="grid grid-cols-2 gap-3">
             <Field label="First Name" t={t}><input required autoComplete="given-name" value={form.first_name} onChange={(e) => upd("first_name", e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
             <Field label="Last Name" t={t}><input required autoComplete="family-name" value={form.last_name} onChange={(e) => upd("last_name", e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
-            <div className="col-span-2"><Field label="Date of birth (you must be at least 18)" t={t}><input required type="date" max={latestEligibleBirthDate()} autoComplete="bday" value={form.date_of_birth} onChange={(e) => upd("date_of_birth", e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field></div>
+            <div className="col-span-2 flex flex-col gap-1.5 text-sm"><span className={`font-medium ${t.subtext}`}>Date of birth (you must be at least 18)</span><BirthDateInput value={form.date_of_birth} onChange={(v) => upd("date_of_birth", v)} t={t} id="reg-dob" /></div>
           </div>
         )}
         <Field label="Email" t={t}><input required type="email" autoComplete="email" value={form.email} onChange={(e) => upd("email", e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
@@ -905,7 +963,8 @@ function PassengerPage({ t, go, ctx, currentUser }) {
 
 function PaymentPage({ t, go, ctx, stations, assistantPaymentMethod }) {
   const [now, setNow] = useState(Date.now());
-  const [method, setMethod] = useState("bKash");
+  const [method, setMethod] = useState("");
+  const [walletBalance, setWalletBalance] = useState(null);
   const [failNext, setFailNext] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -924,6 +983,19 @@ function PaymentPage({ t, go, ctx, stations, assistantPaymentMethod }) {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    let alive = true;
+    api("/wallet").then((data) => {
+      const balance = Number(data.balance);
+      if (!alive) return;
+      setWalletBalance(balance);
+      // Prefer the in-app balance when it can cover this fare. An explicit
+      // assistant payment choice still takes precedence.
+      if (!assistantPaymentMethod) setMethod((selected) => selected || (balance >= Number(booking.fare) ? "Wallet" : "bKash"));
+    }).catch(() => { if (alive) { setWalletBalance(0); setMethod((selected) => selected || "bKash"); } });
+    return () => { alive = false; };
+  }, [assistantPaymentMethod, booking.fare]);
 
   const remaining = HOLD_MS - (now - bookingDate);
   const active = booking.booking_status === "pending" && remaining > 0;
@@ -950,6 +1022,7 @@ function PaymentPage({ t, go, ctx, stations, assistantPaymentMethod }) {
     setLoading(true);
     try {
       const result = await api(`/bookings/${booking.pnr_number}/pay`, { method: "POST", body: { method } });
+      window.dispatchEvent(new Event("wallet-balance-updated"));
       sessionStorage.removeItem(PENDING_BOOKING_KEY);
       go("ticket", { booking: result });
     } catch (e) {
@@ -1005,16 +1078,18 @@ function PaymentPage({ t, go, ctx, stations, assistantPaymentMethod }) {
       <div className={`mt-4 rounded-xl border p-5 ${t.cardBg}`}>
         <h3 className={`font-semibold mb-3 ${t.text}`}>Payment Method</h3>
         <div className="flex gap-3 flex-wrap">
-          {["bKash", "Nagad", "Card"].map((m) => (
-            <button key={m} onClick={() => setMethod(m)} className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${method === m ? "border-brand text-brand bg-brand/5" : `${t.cardAltBg} ${t.text}`}`}>{m}</button>
+          {["bKash", "Nagad", "Card", "Wallet"].map((m) => (
+            <button key={m} onClick={() => setMethod(m)} className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${method === m ? "border-brand text-brand bg-brand/5" : `${t.cardAltBg} ${t.text}`}`}>{m === "Wallet" ? `Wallet · ${walletBalance === null ? "…" : `৳${walletBalance.toFixed(2)}`}` : m}</button>
           ))}
         </div>
+        {method === "Wallet" && walletBalance !== null && walletBalance >= Number(booking.fare) && <p className={`mt-3 rounded-lg px-3 py-2 text-sm ${t.dark ? "bg-emerald-950/40 text-emerald-300" : "bg-emerald-50 text-emerald-800"}`}>Wallet will be charged ৳{Number(booking.fare).toFixed(2)}. Balance after booking: ৳{(walletBalance - Number(booking.fare)).toFixed(2)}.</p>}
+        {method === "Wallet" && walletBalance !== null && walletBalance < Number(booking.fare) && <div className="mt-3 flex items-center justify-between gap-3"><p className={`text-sm ${t.subtext}`}>Add funds to cover this fare.</p><OutlineButton t={t} onClick={() => go("wallet", { walletReturn: "payment" })}>Add wallet funds</OutlineButton></div>}
         <label className={`flex items-center gap-2 mt-4 text-xs ${t.subtext}`}>
           <input type="checkbox" checked={failNext} onChange={(e) => setFailNext(e.target.checked)} />
           Simulate a failed payment (for testing)
         </label>
         <ErrorBanner message={error} />
-        <PrimaryButton t={t} onClick={pay} disabled={loading || cancelling} className="w-full mt-4">{loading ? "Processing…" : `Pay ৳${booking.fare}`}</PrimaryButton>
+        <PrimaryButton t={t} onClick={pay} disabled={!method || loading || cancelling || (method === "Wallet" && walletBalance !== null && walletBalance < Number(booking.fare))} className="w-full mt-4">{loading ? "Processing…" : `Pay ৳${booking.fare}${method === "Wallet" ? " from wallet" : ""}`}</PrimaryButton>
       </div>
     </div>
   );
@@ -1035,6 +1110,7 @@ function TicketPage({ t, go, ctx, stations }) {
     setCancelError("");
     try {
       await api(`/bookings/${encodeURIComponent(booking.pnr_number)}/tickets/${ticket.ticket_id}`, { method: "DELETE" });
+      window.dispatchEvent(new Event("wallet-balance-updated"));
       const fresh = await api(`/bookings/${encodeURIComponent(booking.pnr_number)}`);
       go("ticket", { booking: fresh, fromMyBookings: true });
     } catch (e) { setCancelError(e.message); }
@@ -1162,6 +1238,9 @@ function AdminPage({ t, currentUser }) {
   const [saving, setSaving] = useState("");
   const [lastStatsUpdate, setLastStatsUpdate] = useState(null);
   const [newUser, setNewUser] = useState({ first_name: "", last_name: "", email: "", password: "", role: "customer" });
+  const [adminCredit, setAdminCredit] = useState({ user_id: "", amount: "", reason: "" });
+  const [adminCreditMessage, setAdminCreditMessage] = useState("");
+  const [adminCreditError, setAdminCreditError] = useState("");
   const [customBooking, setCustomBooking] = useState({ user_id: "", trip_id: "", coach_id: "", seat_id: "", from: "", to: "", passenger_name: "", passenger_age: "", fare: "", status: "confirmed", payment_method: "Card" });
 
   const load = async () => {
@@ -1276,6 +1355,20 @@ function AdminPage({ t, currentUser }) {
     finally { setSaving(""); }
   };
 
+  const creditUserWallet = async (event) => {
+    event.preventDefault(); setSaving("wallet-credit"); setAdminCreditError(""); setAdminCreditMessage("");
+    try {
+      const result = await api(`/admin/users/${adminCredit.user_id}/wallet-credit`, {
+        method: "POST", body: { amount: adminCredit.amount, reason: adminCredit.reason },
+      });
+      window.dispatchEvent(new Event("wallet-balance-updated"));
+      const recipient = users.find((user) => String(user.user_id) === adminCredit.user_id);
+      setAdminCreditMessage(`Added ৳${Number(result.transaction.amount).toFixed(2)} to ${recipient?.first_name || "the user"}'s wallet. New balance: ৳${Number(result.balance).toFixed(2)}.`);
+      setAdminCredit((value) => ({ ...value, amount: "", reason: "" }));
+    } catch (e) { setAdminCreditError(e.message); }
+    finally { setSaving(""); }
+  };
+
   const deleteContact = async (contactId) => {
     if (!window.confirm("Delete this contact message permanently?")) return;
     setSaving(`contact-${contactId}`);
@@ -1314,9 +1407,10 @@ function AdminPage({ t, currentUser }) {
   const cards = [
     ["Customers", summary.users.customers],
     ["Administrators", summary.users.admins],
-    ["Scheduled trips", summary.trips.scheduled],
-    ["Confirmed bookings", summary.bookings.confirmed],
+    ["Upcoming scheduled trips", summary.trips.scheduled],
+    ["Current bookings", summary.bookings.current],
     ["Active payment holds", summary.bookings.pending],
+    ["Seats reserved · next 30 days", `${summary.occupancy.reserved} / ${summary.occupancy.capacity}`],
   ];
   const selectedTrip = bookingOptions.trips.find((trip) => String(trip.trip_id) === customBooking.trip_id);
   const matchingCoaches = bookingOptions.coaches.filter((coach) => selectedTrip && coach.train_id === selectedTrip.train_id);
@@ -1337,6 +1431,7 @@ function AdminPage({ t, currentUser }) {
       <h1 className={`text-2xl font-bold tracking-tight ${t.text}`}>Admin Dashboard</h1>
       <p className={`mt-1 text-sm ${t.subtext}`}>This area is available only to accounts with administrator privileges.</p>
       <p className={`mt-1 text-xs ${t.subtext}`}>Statistics refresh every 15 seconds{lastStatsUpdate ? ` · Updated ${lastStatsUpdate.toLocaleTimeString()}` : ""}</p>
+      <p className={`mt-1 text-xs ${t.subtext}`}>The scheduled-trip total counts departures dated today or later. Current bookings include confirmed bookings and unexpired holds for active tickets on those trips.</p>
       <div className="mt-3 flex justify-end"><OutlineButton t={t} onClick={load}>Refresh dashboard</OutlineButton></div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
         {cards.map(([label, value]) => (
@@ -1376,6 +1471,17 @@ function AdminPage({ t, currentUser }) {
           <Field label="Booking status" t={t}><select value={customBooking.status} onChange={(e) => setCustomBooking((v) => ({ ...v, status: e.target.value }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`}><option value="confirmed">Confirmed</option><option value="pending">Pending payment</option></select></Field>
           {customBooking.status === "confirmed" && <Field label="Payment method" t={t}><select value={customBooking.payment_method} onChange={(e) => setCustomBooking((v) => ({ ...v, payment_method: e.target.value }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`}><option>Card</option><option>bKash</option><option>Nagad</option></select></Field>}
           <div className="flex items-end"><PrimaryButton t={t} type="submit" disabled={saving === "custom-booking"}>{saving === "custom-booking" ? "Creating…" : "Create booking"}</PrimaryButton></div>
+        </form>
+      </section>
+
+      <section className={`mt-8 rounded-xl border overflow-hidden ${t.cardBg}`}>
+        <div className={`p-5 border-b ${t.divider}`}><h2 className={`font-semibold ${t.text}`}>Add funds to a user wallet</h2><p className={`mt-1 text-sm ${t.subtext}`}>Admin credits are recorded in the recipient’s wallet activity with your account and reason.</p></div>
+        <form onSubmit={creditUserWallet} className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-4">
+          <Field label="User account" t={t}><select required value={adminCredit.user_id} onChange={(e) => setAdminCredit((value) => ({ ...value, user_id: e.target.value }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`}><option value="">Choose any user</option>{users.map((user) => <option key={user.user_id} value={user.user_id}>{user.first_name} {user.last_name} · {user.email}</option>)}</select></Field>
+          <Field label="Amount (৳1–৳50,000)" t={t}><input required type="number" min="1" max="50000" step="0.01" value={adminCredit.amount} onChange={(e) => setAdminCredit((value) => ({ ...value, amount: e.target.value }))} className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`} /></Field>
+          <Field label="Reason" t={t}><input required minLength="3" maxLength="100" value={adminCredit.reason} onChange={(e) => setAdminCredit((value) => ({ ...value, reason: e.target.value }))} placeholder="e.g. Service adjustment" className={`w-full rounded-lg border px-3 py-2.5 text-sm ${t.inputBg}`} /></Field>
+          <div className="flex items-end"><PrimaryButton t={t} type="submit" disabled={saving === "wallet-credit" || !users.length}>{saving === "wallet-credit" ? "Crediting…" : "Add wallet credit"}</PrimaryButton></div>
+          <div className="sm:col-span-2 lg:col-span-4"><ErrorBanner message={adminCreditError} />{adminCreditMessage && <p role="status" className="text-sm text-emerald-700">{adminCreditMessage}</p>}</div>
         </form>
       </section>
 
@@ -1721,6 +1827,49 @@ function CustomerAssistant({ t, stations, page, assistantChoices, assistantPayme
   </>;
 }
 
+function WalletPage({ t, ctx, go }) {
+  const [wallet, setWallet] = useState(null);
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState("bKash");
+  const [reference, setReference] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [saving, setSaving] = useState(false);
+  const load = () => api("/wallet").then(setWallet).catch((e) => setError(e.message));
+  useEffect(() => { load(); }, []);
+  const topUp = async (event) => {
+    event.preventDefault(); setSaving(true); setError(""); setNotice("");
+    try {
+      const result = await api("/wallet/top-ups", { method: "POST", body: { amount, method, reference_code: reference } });
+      window.dispatchEvent(new Event("wallet-balance-updated"));
+      setWallet((previous) => ({ balance: result.balance, transactions: [result.transaction, ...(previous?.transactions || [])] }));
+      setAmount(""); setReference(""); setNotice("Simulated top-up added to your wallet.");
+    } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
+  };
+  const fmt = (value) => `৳${Number(value).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return <div className="max-w-3xl mx-auto px-4 py-8">
+    {ctx.walletReturn === "payment" && <BackBar t={t} onBack={() => go("payment", { walletReturn: null })} label="Back to ticket payment" />}
+    <h1 className={`text-2xl font-bold tracking-tight ${t.text}`}>My Wallet</h1>
+    <p className={`mt-1 text-sm ${t.subtext}`}>Use your wallet balance for ticket purchases. Ticket refunds are credited here.</p>
+    <div className={`mt-5 rounded-xl border p-5 ${t.cardBg}`}><p className={`text-sm ${t.subtext}`}>Available balance</p><p className={`mt-1 text-3xl font-bold ${t.text}`}>{wallet ? fmt(wallet.balance) : "Loading…"}</p></div>
+    <form onSubmit={topUp} className={`mt-5 rounded-xl border p-5 space-y-4 ${t.cardBg}`}>
+      <div><h2 className={`font-semibold ${t.text}`}>Add funds</h2><p className={`mt-1 text-xs ${t.subtext}`}>Simulated top-up only. No bKash, Nagad, card, or bank gateway is contacted or verified.</p></div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Amount (BDT) · ৳10 to ৳50,000" t={t}><input required type="number" min="10" max="50000" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
+        <Field label="Method" t={t}><select value={method} onChange={(e) => setMethod(e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`}><option>bKash</option><option>Nagad</option><option>Card</option><option>Other</option></select></Field>
+      </div>
+      <Field label="Transaction reference (optional)" t={t}><input maxLength="100" value={reference} onChange={(e) => setReference(e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
+      <ErrorBanner message={error} />{notice && <p role="status" className="text-sm text-emerald-700">{notice}</p>}
+      <PrimaryButton t={t} type="submit" disabled={saving}>{saving ? "Adding…" : "Add simulated funds"}</PrimaryButton>
+    </form>
+    <section className={`mt-6 rounded-xl border overflow-hidden ${t.cardBg}`}>
+      <div className={`p-5 border-b ${t.divider}`}><h2 className={`font-semibold ${t.text}`}>Wallet activity</h2></div>
+      {!wallet?.transactions?.length ? <p className={`p-5 text-sm ${t.subtext}`}>No wallet transactions yet.</p> : <div className="overflow-x-auto"><table className="w-full text-sm"><thead className={t.cardAltBg}><tr><th className={`p-3 text-left ${t.subtext}`}>Date</th><th className={`p-3 text-left ${t.subtext}`}>Activity</th><th className={`p-3 text-left ${t.subtext}`}>Method</th><th className={`p-3 text-right ${t.subtext}`}>Amount</th><th className={`p-3 text-right ${t.subtext}`}>Balance</th></tr></thead><tbody>{wallet.transactions.map((item) => { const credit = item.transaction_type !== "purchase"; return <tr key={item.transaction_id} className={`border-t ${t.divider}`}><td className={`p-3 whitespace-nowrap ${t.subtext}`}>{new Date(item.created_at).toLocaleString()}</td><td className={`p-3 ${t.text}`}>{item.transaction_type.replace("_", " ")}{item.actor_first_name ? ` · by ${item.actor_first_name} ${item.actor_last_name}` : ""}{item.pnr_number ? ` · ${item.pnr_number}` : ""}{item.reference_code ? ` · ${item.reference_code}` : ""}</td><td className={`p-3 ${t.text}`}>{item.payment_method}</td><td className={`p-3 text-right font-semibold ${credit ? "text-emerald-700" : "text-red-600"}`}>{credit ? "+" : "−"}{fmt(item.amount)}</td><td className={`p-3 text-right ${t.text}`}>{fmt(item.balance_after)}</td></tr>; })}</tbody></table></div>}
+    </section>
+  </div>;
+}
+
 function ProfilePage({ t, currentUser, go }) {
   const birthDate = currentUser.date_of_birth ? new Date(`${currentUser.date_of_birth.slice(0, 10)}T00:00:00`).toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" }) : "Not provided";
   return <div className="max-w-2xl mx-auto px-4 py-10">
@@ -1736,6 +1885,7 @@ function ProfilePage({ t, currentUser, go }) {
       <PrimaryButton t={t} onClick={() => go("editprofile")}>Edit Profile</PrimaryButton>
       <OutlineButton t={t} onClick={() => go("changepassword")}>Change Password</OutlineButton>
       <OutlineButton t={t} onClick={() => go("mybookings")}>My Bookings</OutlineButton>
+      <OutlineButton t={t} onClick={() => go("wallet")}>Wallet</OutlineButton>
     </div>
   </div>;
 }
@@ -1758,7 +1908,7 @@ function EditProfilePage({ t, currentUser, onProfileUpdated, go }) {
       <div><h1 className={`text-xl font-bold ${t.text}`}>Edit Profile</h1><p className={`mt-1 text-sm ${t.subtext}`}>Email address cannot be changed here. Confirm your current password to save profile changes.</p></div>
       <Field label="First name" t={t}><input required maxLength={50} value={profile.first_name} onChange={(event) => update("first_name", event.target.value)} autoComplete="given-name" className={`w-full px-3.5 py-2.5 border text-sm ${t.inputBg}`} /></Field>
       <Field label="Last name" t={t}><input required maxLength={50} value={profile.last_name} onChange={(event) => update("last_name", event.target.value)} autoComplete="family-name" className={`w-full px-3.5 py-2.5 border text-sm ${t.inputBg}`} /></Field>
-      <Field label="Date of birth (you must be at least 18)" t={t}><input required type="date" max={latestEligibleBirthDate()} value={profile.date_of_birth} onChange={(event) => update("date_of_birth", event.target.value)} autoComplete="bday" className={`w-full px-3.5 py-2.5 border text-sm ${t.inputBg}`} /></Field>
+      <div className="flex flex-col gap-1.5 text-sm"><span className={`font-medium ${t.subtext}`}>Date of birth (you must be at least 18)</span><BirthDateInput value={profile.date_of_birth} onChange={(v) => update("date_of_birth", v)} t={t} id="prof-dob" /></div>
       <Field label="Current password" t={t}><input required type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className={`w-full px-3.5 py-2.5 border text-sm ${t.inputBg}`} /></Field>
       <ErrorBanner message={error} />
       <PrimaryButton t={t} type="submit" disabled={saving}>{saving ? "Saving…" : "Save Profile"}</PrimaryButton>
@@ -1998,7 +2148,7 @@ function App() {
   useEffect(() => {
     if (!authChecked) return;
     if (AUTH_ONLY_PAGES.has(page) && !currentUser) {
-      if (page === "contact" || page === "mybookings") setPendingPage(page);
+      if (page === "contact" || page === "mybookings" || page === "wallet") setPendingPage(page);
       go("login", {}, { replace: true });
       return;
     }
@@ -2059,6 +2209,7 @@ function App() {
     setCurrentUser(user);
     if (pendingSearch) { setSearch(pendingSearch); setPendingSearch(null); go("results"); }
     else if (pendingPage) { const destination = pendingPage; setPendingPage(null); go(destination); }
+    else if (user.role === "admin") go("admin");
     else go("home");
   };
 
@@ -2140,6 +2291,8 @@ function App() {
     body = <TicketPage t={t} go={goBooking} ctx={ctx} stations={stations} />;
   } else if (page === "mybookings" && currentUser) {
     body = <MyBookingsPage t={t} go={goBooking} stations={stations} />;
+  } else if (page === "wallet" && currentUser) {
+    body = <WalletPage t={t} ctx={ctx} go={goBooking} />;
   } else if (page === "routes") {
     body = <RouteDirectory t={t} onPick={(from, to) => { setSearch((s) => ({ ...s, from, to })); go("home"); window.setTimeout(() => document.getElementById("search-card")?.scrollIntoView({ behavior: "smooth", block: "center" }), 120); }} />;
   } else if (page === "stations") {

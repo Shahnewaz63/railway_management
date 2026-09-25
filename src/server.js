@@ -5,15 +5,11 @@ const { HOLD_MINUTES } = require("./config/fares");
 
 const PORT = process.env.PORT || 3000;
 
-// Belt-and-suspenders: every request that reads a booking already computes
-// its effective status live, but this sweep also flips the stored
-// booking_status column so it reflects reality even for rows nobody reads.
+// Persist expiration through the database maintenance procedure. Reads also
+// compute effective status live, so holds remain accurate between sweeps.
 setInterval(async () => {
   try {
-    await pool.query(
-      `UPDATE booking SET booking_status = 'expired'
-       WHERE booking_status = 'pending' AND now() - booking_date >= interval '${HOLD_MINUTES} minutes'`
-    );
+    await pool.query("CALL run_booking_maintenance($1)", [HOLD_MINUTES]);
   } catch (err) {
     console.error("[expiry-sweep] failed:", err.message);
   }

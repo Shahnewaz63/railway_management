@@ -152,6 +152,7 @@ async function syncRailNetwork(client) {
   await client.query("ALTER TABLE coach ALTER COLUMN coach_number TYPE VARCHAR(8) USING coach_number::text");
   await client.query("ALTER TABLE route_station ADD COLUMN IF NOT EXISTS distance_km NUMERIC(7,1) NOT NULL DEFAULT 0");
   await client.query("ALTER TABLE train ADD COLUMN IF NOT EXISTS train_category VARCHAR(30) NOT NULL DEFAULT 'Standard'");
+  await client.query("CREATE UNIQUE INDEX IF NOT EXISTS idx_trip_train_departure_unique ON trip (train_id, departure_date)");
 
   for (const [code, name, city] of STATIONS) {
     await client.query(`INSERT INTO station (station_code,station_name,city) VALUES ($1,$2,$3)

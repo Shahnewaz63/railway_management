@@ -17,19 +17,57 @@ router.use(requireAuth, requireAdmin);
 // project grows; every route in this router is admin-only.
 router.get("/summary", async (req, res, next) => {
   try {
-    const [usersRes, tripsRes, bookingsRes] = await Promise.all([
+    const [usersRes, occupancyRes, tripsRes, bookingsRes] = await Promise.all([
       pool.query(
         `SELECT COUNT(*)::int AS total,
                 COUNT(*) FILTER (WHERE role = 'admin')::int AS admins,
                 COUNT(*) FILTER (WHERE role = 'customer')::int AS customers
          FROM users`
       ),
-      pool.query("SELECT COUNT(*)::int AS scheduled FROM trip WHERE status = 'scheduled'"),
       pool.query(
-        `SELECT COUNT(*)::int AS total,
+        `WITH upcoming AS (
+           SELECT trip_id, train_id FROM trip
+           WHERE status = 'scheduled'
+             AND departure_date >= CURRENT_DATE
+             AND departure_date < CURRENT_DATE + interval '30 days'
+         ), capacity AS (
+           SELECT COUNT(*)::int AS seats
+           FROM upcoming u JOIN coach c ON c.train_id = u.train_id
+           JOIN seat s ON s.coach_id = c.coach_id
+         ), reserved AS (
+           SELECT COUNT(DISTINCT (tk.trip_id, tk.seat_id))::int AS seats
+           FROM upcoming u JOIN ticket tk ON tk.trip_id = u.trip_id
+           JOIN booking b ON b.pnr_number = tk.pnr_number
+           WHERE tk.ticket_status = 'active'
+             AND (b.booking_status = 'confirmed'
+               OR (b.booking_status = 'pending' AND b.booking_date > now() - interval '${HOLD_MINUTES} minutes'))
+         )
+         SELECT capacity.seats AS capacity, reserved.seats AS reserved
+         FROM capacity CROSS JOIN reserved`
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS scheduled
+         FROM trip
+         WHERE status = 'scheduled' AND departure_date >= CURRENT_DATE`
+      ),
+      pool.query(
+        `WITH active AS (
+           SELECT DISTINCT b.pnr_number, b.booking_status
+           FROM booking b
+           JOIN ticket tk ON tk.pnr_number = b.pnr_number AND tk.ticket_status = 'active'
+           JOIN trip t ON t.trip_id = tk.trip_id
+           WHERE t.status = 'scheduled'
+             AND t.departure_date >= CURRENT_DATE
+             AND (
+               b.booking_status = 'confirmed'
+               OR (b.booking_status = 'pending'
+                   AND b.booking_date > now() - interval '${HOLD_MINUTES} minutes')
+             )
+         )
+         SELECT COUNT(*)::int AS current,
                 COUNT(*) FILTER (WHERE booking_status = 'confirmed')::int AS confirmed,
-                COUNT(*) FILTER (WHERE booking_status = 'pending' AND now() - booking_date < interval '${HOLD_MINUTES} minutes')::int AS pending
-         FROM booking`
+                COUNT(*) FILTER (WHERE booking_status = 'pending')::int AS pending
+         FROM active`
       ),
     ]);
 
@@ -37,6 +75,7 @@ router.get("/summary", async (req, res, next) => {
       users: usersRes.rows[0],
       trips: tripsRes.rows[0],
       bookings: bookingsRes.rows[0],
+      occupancy: occupancyRes.rows[0],
     });
   } catch (err) {
     next(err);
@@ -57,6 +96,42 @@ router.get("/users", async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// Admin adjustments are credited atomically and attributed in the wallet
+// ledger so the recipient can see who added the balance and why.
+router.post("/users/:userId/wallet-credit", async (req, res, next) => {
+  const userId = parsePositiveId(req.params.userId);
+  const amountText = typeof req.body?.amount === "string" ? req.body.amount : String(req.body?.amount ?? "");
+  const amount = Number(amountText);
+  const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+  if (!userId || !/^\d{1,6}(\.\d{1,2})?$/.test(amountText) || !Number.isFinite(amount) || amount < 1 || amount > 50000 || reason.length < 3 || reason.length > 100) {
+    return res.status(400).json({ error: "Choose a user, enter an amount from ৳1 to ৳50,000, and provide a 3–100 character reason." });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const target = await client.query("SELECT user_id FROM users WHERE user_id = $1 FOR UPDATE", [userId]);
+    if (!target.rowCount) throw Object.assign(new Error("User not found."), { status: 404 });
+    await client.query("INSERT INTO wallet_account(user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", [userId]);
+    const account = await client.query(
+      `UPDATE wallet_account SET balance = balance + $2, updated_at = now()
+       WHERE user_id = $1 RETURNING balance`, [userId, amount]
+    );
+    const transaction = await client.query(
+      `INSERT INTO wallet_transaction(user_id, transaction_type, amount, balance_after, payment_method, reference_code, actor_user_id)
+       VALUES ($1, 'admin_credit', $2, $3, 'Other', $4, $5)
+       RETURNING transaction_id, transaction_type, amount, balance_after, payment_method, reference_code, actor_user_id, created_at`,
+      [userId, amount, account.rows[0].balance, reason, req.user.user_id]
+    );
+    await client.query("COMMIT");
+    res.status(201).json({ balance: account.rows[0].balance, transaction: transaction.rows[0] });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  } finally { client.release(); }
 });
 
 router.get("/booking-options", async (req, res, next) => {

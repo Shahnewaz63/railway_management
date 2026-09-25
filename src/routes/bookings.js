@@ -230,7 +230,7 @@ router.get("/:pnr", requireAuth, async (req, res, next) => {
 router.post("/:pnr/pay", requireAuth, async (req, res, next) => {
   const pnr = normalizePnr(req.params.pnr);
   const { method } = req.body || {};
-  if (!pnr || !["bKash", "Nagad", "Card"].includes(method)) return res.status(400).json({ error: "A valid booking reference and payment method are required." });
+  if (!pnr || !["bKash", "Nagad", "Card", "Wallet"].includes(method)) return res.status(400).json({ error: "A valid booking reference and payment method are required." });
 
   const client = await pool.connect();
   try {
@@ -255,6 +255,26 @@ router.post("/:pnr/pay", requireAuth, async (req, res, next) => {
 
     const existingPay = await client.query("SELECT 1 FROM payment WHERE pnr_number = $1", [pnr]);
     if (existingPay.rowCount) throw httpError(409, "This booking has already been paid.");
+
+    if (method === "Wallet") {
+      await client.query("INSERT INTO wallet_account(user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", [booking.user_id]);
+      const wallet = await client.query("SELECT balance FROM wallet_account WHERE user_id = $1 FOR UPDATE", [booking.user_id]);
+      if (Number(wallet.rows[0].balance) < Number(booking.fare)) {
+        throw httpError(409, "Your wallet balance is too low. Add funds or choose another payment method.");
+      }
+      const debit = await client.query(
+        `UPDATE wallet_account SET balance = balance - $2, updated_at = now()
+         WHERE user_id = $1 AND balance >= $2 RETURNING balance`, [booking.user_id, booking.fare]
+      );
+      if (!debit.rowCount) throw httpError(409, "Your wallet balance is too low. Add funds or choose another payment method.");
+      if (Number(booking.fare) > 0) {
+        await client.query(
+          `INSERT INTO wallet_transaction(user_id, transaction_type, amount, balance_after, payment_method, pnr_number)
+           VALUES ($1, 'purchase', $2, $3, 'Wallet', $4)`,
+          [booking.user_id, booking.fare, debit.rows[0].balance, pnr]
+        );
+      }
+    }
 
     await client.query("INSERT INTO payment (pnr_number, amount, payment_method) VALUES ($1,$2,$3)", [
       pnr,

@@ -13,6 +13,7 @@ const contactRoutes = require("./routes/contact");
 const routeRoutes = require("./routes/routes");
 const reviewRoutes = require("./routes/reviews");
 const assistantRoutes = require("./routes/assistant");
+const walletRoutes = require("./routes/wallet");
 const errorHandler = require("./middleware/errorHandler");
 const { hideApiFromDirectBrowsing } = require("./middleware/apiVisibility");
 
@@ -37,6 +38,7 @@ app.use("/api/reviews", reviewRoutes);
 app.use("/api/assistant", assistantRoutes);
 app.use("/api/trips", tripRoutes);
 app.use("/api/bookings", bookingRoutes);
+app.use("/api/wallet", walletRoutes);
 app.use("/api/classes", classRoutes);
 app.use("/api/contact", contactRoutes);
 app.use("/api/admin", adminRoutes);
