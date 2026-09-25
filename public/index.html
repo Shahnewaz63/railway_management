@@ -75,12 +75,17 @@
   .glass-nav.scrolled { background: rgba(249,252,254,.92); border-color: rgba(210,224,232,.8); box-shadow: 0 8px 28px rgba(20,51,69,.08); }
   .glass-nav.scrolled .home-nav-text { color: #334155; }
   .glass-nav:not(.scrolled) .home-nav-text { color: rgba(255,255,255,.92); }
-  .glass-nav:not(.scrolled) .brand-label { color: #fff; }
-  .glass-nav:not(.scrolled) .brand-mark { background: rgba(255,255,255,.18); }
+  .glass-nav .brand-label { color: #fff !important; }
+  .glass-nav .brand-label span { color: #42D392 !important; }
+  .glass-nav .brand-mark { background: #0B6B4F !important; color: #fff !important; }
   .service-card { transition: transform .24s ease, box-shadow .24s ease, border-color .24s ease; }
   .service-card:hover { transform: translateY(-5px); box-shadow: 0 18px 36px rgba(20,51,69,.1); border-color: rgba(11,107,79,.28); }
   .service-card:hover .service-icon { transform: scale(1.08) rotate(-3deg); }
   .service-icon { transition: transform .24s ease; }
+  .service-action:focus-visible { outline: 3px solid rgba(11,107,79,.48); outline-offset: 3px; border-color: #0B6B4F; }
+  .service-action:hover .service-icon { transform: translateY(-2px) scale(1.08); box-shadow: 0 8px 18px rgba(11,107,79,.12); }
+  .service-cta span { transition: transform .2s ease; }
+  .service-action:hover .service-cta span, .service-action:focus-visible .service-cta span { transform: translateX(4px); }
   .role-badge { display: inline-flex; align-items: center; border: 1px solid transparent; font-weight: 700; letter-spacing: .02em; }
   .role-badge-admin { color: #fff; background: #0B6B4F; border-color: #168468; }
   .role-badge-customer { color: #fff; background: #37566a; border-color: #55768a; }
@@ -99,8 +104,6 @@
   html[data-theme="dark"] .hero-glass { background: rgba(13,32,43,.91); border-color: rgba(157,178,188,.22); box-shadow: 0 24px 70px rgba(0,0,0,.3); }
   html[data-theme="dark"] .glass-nav.scrolled { background: rgba(9,25,35,.94); border-color: rgba(41,67,79,.9); box-shadow: 0 8px 28px rgba(0,0,0,.2); }
   html[data-theme="dark"] .glass-nav.scrolled .home-nav-text { color: #dce9ed; }
-  html[data-theme="dark"] .glass-nav.scrolled .brand-label { color: #edf5f7; }
-  html[data-theme="dark"] .glass-nav.scrolled .brand-mark { background-color: #0B6B4F; }
   html[data-theme="dark"] .bg-white { background-color: #0d202b; }
   html[data-theme="dark"] .border-neutral-200 { border-color: #203844; }
   html[data-theme="dark"] .border-neutral-300 { border-color: #29434f; }

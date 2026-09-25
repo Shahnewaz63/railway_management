@@ -15,6 +15,7 @@ function signToken(user, sessionId) {
       first_name: user.first_name,
       last_name: user.last_name,
       email: user.email,
+      date_of_birth: user.date_of_birth,
       role: user.role,
       jti: sessionId,
     },
@@ -24,7 +25,7 @@ function signToken(user, sessionId) {
 }
 
 function publicUser(u) {
-  return { user_id: u.user_id, first_name: u.first_name, last_name: u.last_name, email: u.email, role: u.role };
+  return { user_id: u.user_id, first_name: u.first_name, last_name: u.last_name, email: u.email, date_of_birth: u.date_of_birth || null, role: u.role };
 }
 
 function setSessionCookie(res, token) {
@@ -56,6 +57,18 @@ function cleanName(value, label) {
   if (typeof value !== "string") return null;
   const name = value.trim().replace(/\s+/g, " ");
   return name.length >= 1 && name.length <= 50 && !/[\u0000-\u001F\u007F]/.test(name) ? name : null;
+}
+
+function cleanBirthDate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) return null;
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date()).map((part) => [part.type, part.value]));
+  const cutoffYear = Number(parts.year) - 18;
+  const month = Number(parts.month);
+  const day = Math.min(Number(parts.day), new Date(Date.UTC(cutoffYear, month, 0)).getUTCDate());
+  const latestEligibleBirthDate = `${cutoffYear}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  return value <= latestEligibleBirthDate && value >= "1900-01-01" ? value : null;
 }
 
 function cleanResetCode(value) {
@@ -144,6 +157,11 @@ router.post("/password-reset/confirm", async (req, res, next) => {
       await client.query("COMMIT");
       return res.status(400).json({ error: "The code is invalid or has expired. Request a new code." });
     }
+    const currentCredential = await client.query("SELECT password_hash FROM user_auth WHERE user_id = $1 FOR UPDATE", [otp.user_id]);
+    if (currentCredential.rowCount && await bcrypt.compare(password, currentCredential.rows[0].password_hash)) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Choose a new password that is different from your current password." });
+    }
     const passwordHash = await bcrypt.hash(password, 10);
     await client.query("UPDATE user_auth SET password_hash = $1 WHERE user_id = $2", [passwordHash, otp.user_id]);
     await client.query("UPDATE password_reset_otp SET consumed_at = now() WHERE reset_id = $1", [otp.reset_id]);
@@ -157,12 +175,13 @@ router.post("/password-reset/confirm", async (req, res, next) => {
 });
 
 router.post("/register", async (req, res, next) => {
-  const { first_name, last_name, email, password } = req.body || {};
+  const { first_name, last_name, email, date_of_birth, password } = req.body || {};
   const firstName = cleanName(first_name, "First name");
   const lastName = cleanName(last_name, "Last name");
   const normalizedEmail = cleanEmail(email);
-  if (!firstName || !lastName || !normalizedEmail || typeof password !== "string") {
-    return res.status(400).json({ error: "First name, last name, email and password are all required." });
+  const birthDate = cleanBirthDate(date_of_birth);
+  if (!firstName || !lastName || !normalizedEmail || !birthDate || typeof password !== "string") {
+    return res.status(400).json({ error: "Enter your first name, last name, email, password, and a valid date of birth showing you are at least 18." });
   }
   if (password.length < 6) {
     return res.status(400).json({ error: "Password must be at least 6 characters." });
@@ -177,8 +196,8 @@ router.post("/register", async (req, res, next) => {
       return res.status(409).json({ error: "An account with this email already exists." });
     }
     const userRes = await client.query(
-      "INSERT INTO users (first_name, last_name, email) VALUES ($1,$2,$3) RETURNING *",
-      [firstName, lastName, normalizedEmail]
+      "INSERT INTO users (first_name, last_name, email, date_of_birth) VALUES ($1,$2,$3,$4) RETURNING *",
+      [firstName, lastName, normalizedEmail, birthDate]
     );
     const user = userRes.rows[0];
     const hash = await bcrypt.hash(password, 10);
@@ -234,13 +253,84 @@ router.post("/login", async (req, res, next) => {
 router.get("/me", requireAuth, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `SELECT user_id, first_name, last_name, email, role
+      `SELECT user_id, first_name, last_name, email, date_of_birth, role
        FROM users WHERE user_id = $1`,
       [req.user.user_id]
     );
     if (!rows.length) return res.status(401).json({ error: "Your account is no longer available." });
     res.json({ user: rows[0] });
   } catch (err) { next(err); }
+});
+
+router.put("/profile", requireAuth, async (req, res, next) => {
+  const firstName = cleanName(req.body?.first_name, "First name");
+  const lastName = cleanName(req.body?.last_name, "Last name");
+  const birthDate = cleanBirthDate(req.body?.date_of_birth);
+  const currentPassword = req.body?.current_password;
+  if (!firstName || !lastName || !birthDate || typeof currentPassword !== "string" || !currentPassword) {
+    return res.status(400).json({ error: "Enter your first name, last name, current password, and a valid date of birth showing you are at least 18." });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const authResult = await client.query("SELECT password_hash FROM user_auth WHERE user_id = $1 FOR UPDATE", [req.user.user_id]);
+    if (!authResult.rows.length || !(await bcrypt.compare(currentPassword, authResult.rows[0].password_hash))) {
+      await client.query("ROLLBACK");
+      return res.status(401).json({ error: "Your current password is incorrect." });
+    }
+    const { rows } = await client.query(
+      `UPDATE users SET first_name = $1, last_name = $2, date_of_birth = $3
+       WHERE user_id = $4 RETURNING user_id, first_name, last_name, email, date_of_birth, role`,
+      [firstName, lastName, birthDate, req.user.user_id]
+    );
+    if (!rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Your account is no longer available." });
+    }
+    await client.query("COMMIT");
+    // Refresh the session claims so existing authenticated routes see the edited profile.
+    setSessionCookie(res, signToken(rows[0], req.user.jti));
+    res.json({ user: rows[0] });
+  } catch (err) { await client.query("ROLLBACK"); next(err); }
+  finally { client.release(); }
+});
+
+router.post("/password/change", requireAuth, async (req, res, next) => {
+  const currentPassword = req.body?.current_password;
+  const newPassword = req.body?.new_password;
+  if (typeof currentPassword !== "string" || !currentPassword
+    || typeof newPassword !== "string" || newPassword.length < 8
+    || Buffer.byteLength(newPassword, "utf8") > 72) {
+    return res.status(400).json({ error: "Enter your current password and a new password between 8 and 72 characters." });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `SELECT a.password_hash, u.user_id, u.first_name, u.last_name, u.email, u.role
+       FROM user_auth a JOIN users u ON u.user_id = a.user_id
+       WHERE u.user_id = $1 FOR UPDATE OF a`, [req.user.user_id]
+    );
+    if (!rows.length || !(await bcrypt.compare(currentPassword, rows[0].password_hash))) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Your current password is incorrect." });
+    }
+    if (await bcrypt.compare(newPassword, rows[0].password_hash)) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Choose a new password that is different from your current password." });
+    }
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await client.query("UPDATE user_auth SET password_hash = $1 WHERE user_id = $2", [passwordHash, req.user.user_id]);
+    await client.query(
+      "UPDATE auth_session SET revoked_at = now() WHERE user_id = $1 AND session_id <> $2 AND revoked_at IS NULL",
+      [req.user.user_id, req.user.jti]
+    );
+    await client.query("COMMIT");
+    res.json({ message: "Password changed successfully." });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    next(err);
+  } finally { client.release(); }
 });
 
 router.post("/logout", requireAuth, async (req, res, next) => {

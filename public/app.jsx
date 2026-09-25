@@ -1,4 +1,4 @@
-const { useState, useEffect, useMemo } = React;
+const { useState, useEffect, useMemo, useCallback } = React;
 
 /* ============================== API client ============================== */
 
@@ -48,6 +48,14 @@ function todayISO() {
   return `${year}-${month}-${day}`;
 }
 
+function latestEligibleBirthDate() {
+  const now = new Date();
+  const year = now.getFullYear() - 18;
+  const month = now.getMonth();
+  const day = Math.min(now.getDate(), new Date(year, month + 1, 0).getDate());
+  return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 /* ============================== Routing ============================== */
 
 // A small, dependency-free router: each "page" the app already tracks in
@@ -64,6 +72,8 @@ const ROUTE_PATHS = {
   payment: "/booking/payment",
   ticket: "/booking/ticket",
   mybookings: "/mybookings",
+  editprofile: "/account/edit",
+  changepassword: "/account/change-password",
   admin: "/admin",
   classinfo: "/classinfo",
   about: "/about",
@@ -81,7 +91,7 @@ function pageFromLocation() {
 }
 
 // Pages that require *some* signed-in user.
-const AUTH_ONLY_PAGES = new Set(["mybookings", "admin", "account", "contact"]);
+const AUTH_ONLY_PAGES = new Set(["mybookings", "admin", "account", "editprofile", "changepassword", "contact"]);
 // Pages that additionally require the administrator role.
 const ADMIN_ONLY_PAGES = new Set(["admin"]);
 const CUSTOMER_ONLY_PAGES = new Set(["contact"]);
@@ -198,7 +208,7 @@ function StationSelect({ value, onChange, t, stations, excludeCode, label }) {
     <div className="relative" ref={ref}>
       <button type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)}
         className={`w-full px-3.5 py-3 rounded-lg border text-left flex items-center gap-3 transition-colors ${t.inputBg} hover:border-brand`}>
-        <span className="text-brand" aria-hidden="true"><svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 20V7m14 13V7M3 20h18M7 7h10M9 4h6M12 4v16" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
+        <span className="text-brand" aria-hidden="true"><svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></svg></span>
         <span className="flex-1 min-w-0">
           <span className={`block text-[11px] uppercase tracking-[.14em] font-semibold ${t.subtext}`}>{label || "Station"}</span>
           <span className={`block truncate text-sm font-semibold ${selected ? t.text : t.subtext}`}>{selected ? `${selected.station_name} · ${selected.city}` : "Choose a station"}</span>
@@ -255,7 +265,7 @@ function BrandMark({ t }) {
           <path d="M3 20.5h18" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" />
         </svg>
       </span>
-      <span className={`brand-label text-[17px] font-bold tracking-tight ${t.text}`}>RailX <span className="text-brand">BD</span></span>
+      <span className="brand-label text-white text-[17px] font-bold tracking-tight">RailX <span className="text-[#42D392]">BD</span></span>
     </span>
   );
 }
@@ -274,7 +284,6 @@ function NavBar({ page, go, onAnchor, t, setTheme, currentUser, logout, logoutPe
   const links = [
     { key: "home", label: "Home" },
     { key: "verify", label: "Verify Ticket" },
-    { key: "status", label: "Live Status", anchor: "scheduled-trains" },
     { key: "routes", label: "Routes" },
     { key: "stations", label: "Stations" },
     { key: "classinfo", label: "Class Info" },
@@ -337,6 +346,7 @@ function NavBar({ page, go, onAnchor, t, setTheme, currentUser, logout, logoutPe
             <>
               <p className={`flex items-center gap-2 text-xs ${t.subtext}`}>Signed in as <Badge t={t} tone={currentUser.role === "admin" ? "admin" : "customer"}>{currentUser.role === "admin" ? "Admin" : "Customer"}</Badge></p>
               <button onClick={() => { go("mybookings"); setOpen(false); }} className={`text-left text-sm font-medium ${t.text}`}>My Bookings</button>
+              <button onClick={() => { go("account"); setOpen(false); }} className={`text-left text-sm font-medium ${t.text}`}>Profile &amp; Security</button>
               {currentUser.role === "admin" && <button onClick={() => { go("admin"); setOpen(false); }} className={`text-left text-sm font-medium ${t.text}`}>Admin Dashboard</button>}
               <button disabled={logoutPending} onClick={() => { logout(); setOpen(false); }} className="text-left text-sm font-medium text-red-600 disabled:opacity-50">{logoutPending ? "Logging out…" : "Logout"}</button>
             </>
@@ -435,17 +445,27 @@ function PopularRoutes({ t, stations, onPick }) {
   );
 }
 
-function FeaturedServices({ t, onAnchor, go }) {
-  const services = [
-    ["◉", "Scheduled train status", "See published departure and arrival times.", "scheduled-trains", "section"],
-    ["✦", "Travel help", "Find answers about booking, payment and seats.", "about", "page"],
-    ["◆", "Train schedules", "Compare departure, arrival and journey duration.", "search-card", "section"],
-    ["৳", "Fare information", "Review available classes and ticket fares.", "classinfo", "page"],
-    ["⌖", "Station guide", "Browse stations in the booking network.", "station-guide", "section"],
-  ];
-  return <section className="max-w-6xl mx-auto px-4 py-14"><div className="mb-7 max-w-xl"><p className="text-xs font-bold uppercase tracking-[.2em] text-brand">Designed around your trip</p><h2 className={`mt-2 text-3xl font-bold tracking-tight ${t.text}`}>Everything you need for your journey</h2></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{services.map(([icon, title, copy, target, type], i) => <button key={title} onClick={() => type === "page" ? go(target) : onAnchor(target)} className={`service-card reveal rounded-2xl border p-5 text-left ${t.cardBg}`} style={{ animationDelay: `${i * 55}ms` }}><span className="service-icon flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-xl font-bold text-brand">{icon}</span><h3 className={`mt-5 font-bold ${t.text}`}>{title}</h3><p className={`mt-2 text-sm leading-relaxed ${t.subtext}`}>{copy}</p><span className="mt-4 inline-flex text-sm font-semibold text-brand">Explore →</span></button>)}</div></section>;
+function ServiceIcon({ name }) {
+  const paths = {
+    status: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3.5 2" /></>,
+    ai: <><path d="M5 5.75h14a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-8l-5 3v-3h-1a2 2 0 0 1-2-2v-8.5a2 2 0 0 1 2-2Z" /><path d="m12 8 .9 2.1L15 11l-2.1.9L12 14l-.9-2.1L9 11l2.1-.9L12 8Z" /></>,
+    train: <><rect x="5" y="3" width="14" height="16" rx="3" /><path d="M8 7h8v5H8zM8 19l-2 3m10-3 2 3M5 15h14M9 16h.01M15 16h.01" /></>,
+    verify: <><path d="M5 4.5h14a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5l-3-3v-9l3-3Z" /><path d="m8.5 12.5 2.2 2.2 4.8-5" /></>,
+    routes: <><path d="M6.5 20s-4-4.1-4-7.1a4 4 0 1 1 8 0c0 3-4 7.1-4 7.1Z" /><circle cx="6.5" cy="12.8" r="1.2" /><path d="M17.5 12s-4-4.1-4-7.1a4 4 0 1 1 8 0c0 3-4 7.1-4 7.1Z" /><circle cx="17.5" cy="4.8" r="1.2" /><path d="M8.5 10.5 14 7" /></>,
+  };
+  return <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
+function FeaturedServices({ t, onAnchor, go, onOpenAssistant }) {
+  const services = [
+    { icon: "status", title: "Scheduled Train Status", copy: "See published departure and arrival times.", action: () => onAnchor("scheduled-trains") },
+    { icon: "ai", title: "RailX AI", copy: "Get help with train search, bookings and ticket questions.", action: onOpenAssistant },
+    { icon: "train", title: "Train Schedules", copy: "Compare departure, arrival and journey duration.", action: () => onAnchor("search-card") },
+    { icon: "verify", title: "Verify Ticket", copy: "Check a ticket using its PNR and booking email.", action: () => go("verify") },
+    { icon: "routes", title: "Route Analysis", copy: "Explore available routes and their station connections.", action: () => go("routes") },
+  ];
+  return <section className="max-w-6xl mx-auto px-4 py-14"><div className="mb-7 max-w-xl"><p className="text-xs font-bold uppercase tracking-[.2em] text-brand">Designed around your trip</p><h2 className={`mt-2 text-3xl font-bold tracking-tight ${t.text}`}>Everything you need for your journey</h2></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{services.map((service, i) => <button key={service.title} onClick={service.action} className={`service-card service-action group reveal rounded-2xl border p-5 text-left ${t.cardBg}`} style={{ animationDelay: `${i * 55}ms` }}><span className="service-icon flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-brand"><ServiceIcon name={service.icon} /></span><h3 className={`mt-5 font-bold ${t.text}`}>{service.title}</h3><p className={`mt-2 text-sm leading-relaxed ${t.subtext}`}>{service.copy}</p><span className="service-cta mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand">Explore <span aria-hidden="true">&#8594;</span></span></button>)}</div></section>;
+}
 function UpcomingTrains({ t, search, stations, onSearch }) {
   const [trips, setTrips] = useState(null);
   const [error, setError] = useState("");
@@ -471,7 +491,7 @@ function RouteDirectory({ t, onPick }) {
   useEffect(() => { api("/routes").then((rows) => { setRoutes(rows); setError(""); }).catch((e) => setError(e.message)); }, []);
   return <section id="popular-routes" className="mx-auto max-w-6xl scroll-mt-24 px-4 py-14"><div className="mb-6"><p className="text-xs font-bold uppercase tracking-[.2em] text-brand">Rail network</p><h2 className={`mt-2 text-3xl font-bold tracking-tight ${t.text}`}>Routes and stations</h2><p className={`mt-1 text-sm ${t.subtext}`}>Browse every stop along each available route.</p></div>{error && <ErrorBanner message={error} />}{!error && routes.length === 0 && <p className={`rounded-xl border p-4 text-sm ${t.cardBg} ${t.subtext}`}>No routes are available yet.</p>}<div className="grid gap-4 md:grid-cols-2">{routes.map((route) => <article key={route.route_id} className={`rounded-2xl border p-5 ${t.cardBg}`}><h3 className={`font-semibold ${t.text}`}>{route.route_name}</h3><div className="mt-4 flex flex-wrap items-center gap-2">{route.stations.map((station, i) => <React.Fragment key={station.station_code}><span className={`rounded-full border px-2.5 py-1 text-xs ${t.cardAltBg} ${t.text}`} title={station.station_name}>{station.city} ({station.station_code})</span>{i < route.stations.length - 1 && <span className="text-brand" aria-hidden="true">&#8250;</span>}</React.Fragment>)}</div><button onClick={() => onPick(route.stations[0].station_code, route.stations[route.stations.length - 1].station_code)} className="mt-4 text-sm font-semibold text-brand">Search this route &#8594;</button></article>)}</div></section>;
 }
-function HomePage({ t, search, setSearch, doSearch, searchError, stations, classTypes, go, onAnchor }) {
+function HomePage({ t, search, setSearch, doSearch, searchError, stations, classTypes, go, onAnchor, onOpenAssistant }) {
   return (
     <div>
       <section className="home-hero relative min-h-[700px] overflow-hidden text-white">
@@ -489,7 +509,7 @@ function HomePage({ t, search, setSearch, doSearch, searchError, stations, class
           <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-medium text-white/80"><span>✓ Schedule based results</span><span>✓ Live seat availability</span><span>✓ Secure booking holds</span></div>
         </div>
       </section>
-      <FeaturedServices t={t} onAnchor={onAnchor} go={go} />
+      <FeaturedServices t={t} onAnchor={onAnchor} go={go} onOpenAssistant={onOpenAssistant} />
       <UpcomingTrains t={t} search={search} stations={stations} onSearch={doSearch} />
     </div>
   );
@@ -498,7 +518,7 @@ function HomePage({ t, search, setSearch, doSearch, searchError, stations, class
 function LoginPage({ t, pendingSearch, onLogin, stations }) {
   const [mode, setMode] = useState("login");
   const [resetStep, setResetStep] = useState("request");
-  const [form, setForm] = useState({ first_name: "", last_name: "", email: "", password: "", otp: "", new_password: "" });
+  const [form, setForm] = useState({ first_name: "", last_name: "", email: "", date_of_birth: "", password: "", otp: "", new_password: "" });
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
@@ -558,6 +578,7 @@ function LoginPage({ t, pendingSearch, onLogin, stations }) {
           <div className="grid grid-cols-2 gap-3">
             <Field label="First Name" t={t}><input required autoComplete="given-name" value={form.first_name} onChange={(e) => upd("first_name", e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
             <Field label="Last Name" t={t}><input required autoComplete="family-name" value={form.last_name} onChange={(e) => upd("last_name", e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
+            <div className="col-span-2"><Field label="Date of birth (you must be at least 18)" t={t}><input required type="date" max={latestEligibleBirthDate()} autoComplete="bday" value={form.date_of_birth} onChange={(e) => upd("date_of_birth", e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field></div>
           </div>
         )}
         <Field label="Email" t={t}><input required type="email" autoComplete="email" value={form.email} onChange={(e) => upd("email", e.target.value)} className={`w-full px-3.5 py-2.5 rounded-lg border text-sm ${t.inputBg}`} /></Field>
@@ -604,7 +625,7 @@ function TrainReviews({ t, trip, currentUser }) {
   return <details className="mt-4 border-t pt-3"><summary className="cursor-pointer text-sm font-semibold text-brand">Train reviews {reviews ? `(${reviews.length})` : ""}</summary><div className="mt-3 space-y-3">{reviews?.length === 0 && <p className={`text-sm ${t.subtext}`}>No reviews yet for this train and route.</p>}{reviews?.map((review) => <article key={review.review_id} className={`rounded-xl p-3 ${t.cardAltBg}`}><p className="text-amber-500" aria-label={`${review.rating} out of 5 stars`}>{String.fromCharCode(9733).repeat(review.rating)}{String.fromCharCode(9734).repeat(5 - review.rating)}</p><p className={`mt-1 text-sm ${t.text}`}>{review.comment}</p><p className={`mt-1 text-xs ${t.subtext}`}>{review.first_name} {review.last_name} · {fmtDate(review.created_at)}</p></article>)}{currentUser?.role === "customer" ? <form onSubmit={submit} className="space-y-2"><label className={`block text-xs font-medium ${t.subtext}`}>Your review (available after a confirmed booking)<select value={rating} onChange={(e) => setRating(e.target.value)} className={`ml-2 rounded border px-2 py-1 ${t.inputBg}`}>{[5,4,3,2,1].map((n) => <option key={n} value={n}>{n} stars</option>)}</select></label><textarea required maxLength="1000" rows="2" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Share your experience on this train and route" className={`w-full rounded-lg border px-3 py-2 text-sm ${t.inputBg}`} /><button disabled={saving} className="text-sm font-semibold text-brand disabled:opacity-50">{saving ? "Saving…" : "Submit review"}</button></form> : <p className={`text-xs ${t.subtext}`}>Sign in as a customer to leave a review after booking this train.</p>}<ErrorBanner message={error} /></div></details>;
 }
 
-function ResultsPage({ t, search, go, stations, currentUser }) {
+function ResultsPage({ t, search, go, stations, currentUser, onAssistantChoices }) {
   const [trips, setTrips] = useState(null);
   const [error, setError] = useState("");
   const from = stations.find((s) => s.station_code === search.from);
@@ -622,7 +643,37 @@ function ResultsPage({ t, search, go, stations, currentUser }) {
     if (windowName === "Afternoon") return hour >= 12 && hour < 17;
     return hour >= 17 || hour < 5;
   };
-  const visibleTrips = trips;
+  const visibleTrips = useMemo(() => {
+    const filters = search.filters;
+    if (!trips || !filters) return trips;
+    const minutes = (value) => { const match = String(value || "").match(/(?:T|^)(\d{1,2}):(\d{2})/); return match ? Number(match[1]) * 60 + Number(match[2]) : null; };
+    let result = trips.map((trip) => {
+      const classes = (trip.classes || []).filter((item) => item.available > 0
+        && (filters.passengers == null || item.available >= filters.passengers)
+        && (filters.max_fare == null || (item.fare != null && item.fare <= filters.max_fare)));
+      return { ...trip, classes, duration_minutes: Math.max(0, Math.round((new Date(trip.destination_arrival) - new Date(trip.origin_departure)) / 60000)) };
+    }).filter((trip) => {
+      if (!trip.classes.length) return false;
+      const departure = minutes(trip.origin_departure);
+      const arrival = minutes(trip.destination_arrival);
+      const after = minutes(filters.departure_after);
+      const before = minutes(filters.departure_before);
+      const arrivalAfter = minutes(filters.arrival_after);
+      const arrivalBefore = minutes(filters.arrival_before);
+      if (after != null && departure < after) return false;
+      if (before != null && departure > before) return false;
+      if (arrivalAfter != null && arrival < arrivalAfter) return false;
+      if (arrivalBefore != null && arrival > arrivalBefore) return false;
+      if (filters.max_duration_minutes != null && trip.duration_minutes > filters.max_duration_minutes) return false;
+      if (filters.overnight_allowed === false && trip.origin_departure.slice(0, 10) !== trip.destination_arrival.slice(0, 10)) return false;
+      return true;
+    });
+    if (filters.preference === "cheapest") result.sort((a, b) => Math.min(...a.classes.map((item) => item.fare ?? Infinity)) - Math.min(...b.classes.map((item) => item.fare ?? Infinity)));
+    else if (filters.preference === "fastest") result.sort((a, b) => a.duration_minutes - b.duration_minutes);
+    else if (filters.preference === "earliest") result.sort((a, b) => a.origin_departure.localeCompare(b.origin_departure));
+    else if (filters.preference === "latest") result.sort((a, b) => b.origin_departure.localeCompare(a.origin_departure));
+    return result;
+  }, [trips, search.filters]);
 
   useEffect(() => {
     let cancelled = false;
@@ -632,6 +683,13 @@ function ResultsPage({ t, search, go, stations, currentUser }) {
       .catch((e) => { if (!cancelled) setError(e.message); });
     return () => { cancelled = true; };
   }, [search.from, search.to, search.date, search.klass]);
+
+  useEffect(() => {
+    const choices = (trips || []).flatMap((trip) => (trip.classes || [])
+      .filter((item) => item.available > 0)
+      .map((item) => ({ type: "train", label: `${trip.train_name} · ${item.coach_type}`, tripId: trip.trip_id, trainName: trip.train_name, klass: item.coach_type, fare: item.fare })));
+    onAssistantChoices(choices);
+  }, [trips, onAssistantChoices]);
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
@@ -655,7 +713,7 @@ function ResultsPage({ t, search, go, stations, currentUser }) {
       <div className="space-y-4">
         {visibleTrips && visibleTrips.map((trip) => (
           <div key={trip.trip_id} className={`rounded-xl border p-5 ${t.cardBg}`}>
-            <h2 className={`font-semibold tracking-tight ${t.text}`}>{trip.train_name} <span className={`font-normal text-sm ${t.subtext}`}>#{trip.train_id}</span></h2>
+            <h2 className={`font-semibold tracking-tight ${t.text}`}>{trip.train_name} <span className={`font-normal text-sm ${t.subtext}`}>#{trip.train_id} · {trip.train_category}</span></h2>
             <div className={`my-4 grid grid-cols-[1fr_auto] items-center border-y -mx-5 px-5 py-3 ${t.divider}`}>
               <div className="flex items-center gap-4">
                 <div className="w-24 shrink-0 text-right"><p className={`text-xs font-semibold ${t.text}`}>{shortDate(trip.origin_departure)} · {clock(trip.origin_departure)}</p><p className={`text-sm ${t.subtext}`}>{from?.city || from?.station_name}</p></div>
@@ -693,13 +751,17 @@ function ResultsPage({ t, search, go, stations, currentUser }) {
   );
 }
 
-function CoachPage({ t, go, ctx }) {
+function CoachPage({ t, go, ctx, onAssistantChoices }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     api(`/trips/${ctx.tripId}/coaches?klass=${encodeURIComponent(ctx.klass)}`).then(setData).catch((e) => setError(e.message));
   }, [ctx.tripId, ctx.klass]);
+
+  useEffect(() => {
+    onAssistantChoices((data?.coaches || []).map((coach) => ({ type: "coach", label: `Coach ${coach.coach_number}`, coach, trainName: data.trip.train_name, date: data.trip.departure_date })));
+  }, [data, onAssistantChoices]);
 
   if (error) return <div className="max-w-3xl mx-auto px-4 py-8"><ErrorBanner message={error} /></div>;
   if (!data) return <div className="max-w-3xl mx-auto px-4 py-8"><p className={t.subtext}>Loading…</p></div>;
@@ -721,7 +783,7 @@ function CoachPage({ t, go, ctx }) {
   );
 }
 
-function SeatsPage({ t, go, ctx }) {
+function SeatsPage({ t, go, ctx, onAssistantChoices }) {
   const [seats, setSeats] = useState(null);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState([]);
@@ -729,6 +791,10 @@ function SeatsPage({ t, go, ctx }) {
   useEffect(() => {
     api(`/trips/${ctx.tripId}/coaches/${ctx.coach.coach_id}/seats`).then((d) => setSeats(d.seats)).catch((e) => setError(e.message));
   }, [ctx.tripId, ctx.coach.coach_id]);
+
+  useEffect(() => {
+    onAssistantChoices((seats || []).filter((seat) => !seat.taken).map((seat) => ({ type: "seat", label: `Seat ${seat.seat_number}`, seat })));
+  }, [seats, onAssistantChoices]);
 
   if (error) return <div className="max-w-3xl mx-auto px-4 py-8"><ErrorBanner message={error} /></div>;
   if (!seats) return <div className="max-w-3xl mx-auto px-4 py-8"><p className={t.subtext}>Loading seats…</p></div>;
@@ -837,12 +903,13 @@ function PassengerPage({ t, go, ctx, currentUser }) {
   );
 }
 
-function PaymentPage({ t, go, ctx, stations }) {
+function PaymentPage({ t, go, ctx, stations, assistantPaymentMethod }) {
   const [now, setNow] = useState(Date.now());
   const [method, setMethod] = useState("bKash");
   const [failNext, setFailNext] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  useEffect(() => { if (assistantPaymentMethod) setMethod(assistantPaymentMethod); }, [assistantPaymentMethod]);
   const [cancelling, setCancelling] = useState(false);
 
   const booking = ctx.booking.booking;
@@ -1086,6 +1153,8 @@ function AdminPage({ t, currentUser }) {
   const [bookingOptions, setBookingOptions] = useState(null);
   const [availableCustomSeats, setAvailableCustomSeats] = useState([]);
   const [ticketFilter, setTicketFilter] = useState("");
+  const [selectedTicketIds, setSelectedTicketIds] = useState(() => new Set());
+  const [selectedUserIds, setSelectedUserIds] = useState(() => new Set());
   const [editingTicket, setEditingTicket] = useState(null);
   const [ticketEdit, setTicketEdit] = useState({ passenger_name: "", passenger_age: "" });
   const [error, setError] = useState("");
@@ -1107,6 +1176,8 @@ function AdminPage({ t, currentUser }) {
       setTickets(nextBookings);
       setContacts(nextContacts);
       setBookingOptions(nextOptions);
+      setSelectedTicketIds(new Set());
+      setSelectedUserIds(new Set());
       setLastStatsUpdate(new Date());
     } catch (e) { setError(e.message); }
   };
@@ -1158,12 +1229,48 @@ function AdminPage({ t, currentUser }) {
     finally { setSaving(""); }
   };
 
-  const cancelBooking = async (pnr) => {
-    if (!window.confirm(`Cancel booking ${pnr}? This releases its seats.`)) return;
-    setSaving(`booking-${pnr}`);
-    setError("");
+  const bulkCancelTickets = async () => {
+    const ids = (tickets || []).filter((ticket) => selectedTicketIds.has(ticket.ticket_id)
+      && ticket.ticket_status === "active" && ["pending", "confirmed"].includes(ticket.booking_status)).map((ticket) => ticket.ticket_id);
+    if (!ids.length || !window.confirm(`Cancel ${ids.length} selected active ticket(s)? Refunds will be recorded where applicable.`)) return;
+    setSaving("bulk-cancel-tickets"); setTicketError("");
+    try { const result = await api("/admin/tickets/bulk-cancel", { method: "PATCH", body: { ticket_ids: ids } }); await load(); setTicketError(`${result.cancelled} ticket(s) cancelled.`); }
+    catch (e) { setTicketError(e.message); }
+    finally { setSaving(""); }
+  };
+
+  const cancelTicket = async (ticket) => {
+    if (!window.confirm(`Cancel ticket ${ticket.ticket_id} for ${ticket.passenger_name}?`)) return;
+    setSaving(`cancel-ticket-${ticket.ticket_id}`); setTicketError("");
+    try { await api("/admin/tickets/bulk-cancel", { method: "PATCH", body: { ticket_ids: [ticket.ticket_id] } }); await load(); }
+    catch (e) { setTicketError(e.message); }
+    finally { setSaving(""); }
+  };
+
+  const bulkDeleteTickets = async () => {
+    const ids = (tickets || []).filter((ticket) => selectedTicketIds.has(ticket.ticket_id) && ticket.ticket_status === "cancelled").map((ticket) => ticket.ticket_id);
+    if (!ids.length || !window.confirm(`Permanently delete ${ids.length} selected cancelled ticket(s)? This cannot be undone.`)) return;
+    setSaving("bulk-delete-tickets"); setTicketError("");
+    try { const result = await api("/admin/tickets/bulk-delete", { method: "DELETE", body: { ticket_ids: ids } }); await load(); setTicketError(`${result.deleted} cancelled ticket(s) deleted.`); }
+    catch (e) { setTicketError(e.message); }
+    finally { setSaving(""); }
+  };
+
+  const deleteTicket = async (ticket) => {
+    if (!window.confirm(`Permanently delete cancelled ticket ${ticket.ticket_id}? This cannot be undone.`)) return;
+    setSaving(`delete-ticket-${ticket.ticket_id}`); setTicketError("");
+    try { await api("/admin/tickets/bulk-delete", { method: "DELETE", body: { ticket_ids: [ticket.ticket_id] } }); await load(); }
+    catch (e) { setTicketError(e.message); }
+    finally { setSaving(""); }
+  };
+
+  const deleteProfiles = async (ids) => {
+    const targetUsers = (users || []).filter((user) => ids.includes(user.user_id));
+    if (!targetUsers.length || targetUsers.some((user) => user.user_id === currentUser.user_id)) return;
+    if (!window.confirm(`Permanently delete ${targetUsers.length} profile(s) and their associated bookings and tickets? This cannot be undone.`)) return;
+    setSaving("delete-profiles"); setError("");
     try {
-      await api(`/admin/bookings/${encodeURIComponent(pnr)}/cancel`, { method: "PATCH" });
+      await api("/admin/users/bulk", { method: "DELETE", body: { user_ids: targetUsers.map((user) => user.user_id) } });
       await load();
     } catch (e) { setError(e.message); }
     finally { setSaving(""); }
@@ -1213,6 +1320,18 @@ function AdminPage({ t, currentUser }) {
   ];
   const selectedTrip = bookingOptions.trips.find((trip) => String(trip.trip_id) === customBooking.trip_id);
   const matchingCoaches = bookingOptions.coaches.filter((coach) => selectedTrip && coach.train_id === selectedTrip.train_id);
+  const filteredTickets = (tickets || []).filter((ticket) => {
+    const q = ticketFilter.trim().toLowerCase();
+    return !q || [ticket.pnr_number, ticket.passenger_name, ticket.train_name, ticket.first_name, ticket.last_name]
+      .some((value) => (value || "").toLowerCase().includes(q));
+  });
+  const visibleTicketIds = filteredTickets.filter((ticket) => ticket.ticket_id).map((ticket) => ticket.ticket_id);
+  const allVisibleTicketsSelected = visibleTicketIds.length > 0 && visibleTicketIds.every((id) => selectedTicketIds.has(id));
+  const selectedActiveTicketIds = (tickets || []).filter((ticket) => selectedTicketIds.has(ticket.ticket_id)
+    && ticket.ticket_status === "active" && ["pending", "confirmed"].includes(ticket.booking_status)).map((ticket) => ticket.ticket_id);
+  const selectedCancelledTicketIds = (tickets || []).filter((ticket) => selectedTicketIds.has(ticket.ticket_id) && ticket.ticket_status === "cancelled").map((ticket) => ticket.ticket_id);
+  const visibleDeletableUsers = (users || []).filter((user) => user.user_id !== currentUser.user_id);
+  const allVisibleUsersSelected = visibleDeletableUsers.length > 0 && visibleDeletableUsers.every((user) => selectedUserIds.has(user.user_id));
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       <h1 className={`text-2xl font-bold tracking-tight ${t.text}`}>Admin Dashboard</h1>
@@ -1261,20 +1380,21 @@ function AdminPage({ t, currentUser }) {
       </section>
 
       <section className={`mt-8 rounded-xl border overflow-hidden ${t.cardBg}`}>
-        <div className={`p-5 border-b ${t.divider}`}><h2 className={`font-semibold ${t.text}`}>User Access</h2><p className={`text-sm mt-1 ${t.subtext}`}>Grant or revoke administrator access for other users.</p></div>
+        <div className={`p-5 border-b ${t.divider}`}><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className={`font-semibold ${t.text}`}>User Profiles</h2><p className={`text-sm mt-1 ${t.subtext}`}>Manage access or permanently remove profiles and their booking records.</p></div><button disabled={!selectedUserIds.size || saving === "delete-profiles"} onClick={() => deleteProfiles([...selectedUserIds])} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 disabled:opacity-40">{saving === "delete-profiles" ? "Deleting profiles…" : `Delete selected (${selectedUserIds.size})`}</button></div></div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className={t.cardAltBg}><tr><th className={`p-3 font-semibold ${t.subtext}`}>User</th><th className={`p-3 font-semibold ${t.subtext}`}>Email</th><th className={`p-3 font-semibold ${t.subtext}`}>Role</th><th className={`p-3 font-semibold ${t.subtext}`}>Action</th></tr></thead>
+            <thead className={t.cardAltBg}><tr><th className="p-3"><input type="checkbox" aria-label="Select all removable profiles" checked={allVisibleUsersSelected} onChange={(event) => setSelectedUserIds((previous) => { const next = new Set(previous); visibleDeletableUsers.forEach((user) => event.target.checked ? next.add(user.user_id) : next.delete(user.user_id)); return next; })} /></th><th className={`p-3 font-semibold ${t.subtext}`}>User</th><th className={`p-3 font-semibold ${t.subtext}`}>Email</th><th className={`p-3 font-semibold ${t.subtext}`}>Role</th><th className={`p-3 font-semibold ${t.subtext}`}>Action</th></tr></thead>
             <tbody>
               {users.map((u) => <tr key={u.user_id} className={`border-t ${t.divider}`}>
+                <td className="p-3">{u.user_id !== currentUser.user_id && <input type="checkbox" aria-label={`Select ${u.first_name} ${u.last_name}`} checked={selectedUserIds.has(u.user_id)} onChange={(event) => setSelectedUserIds((previous) => { const next = new Set(previous); event.target.checked ? next.add(u.user_id) : next.delete(u.user_id); return next; })} />}</td>
                 <td className={`p-3 font-medium ${t.text}`}>{u.first_name} {u.last_name}{u.user_id === currentUser.user_id ? " (You)" : ""}</td>
                 <td className={`p-3 ${t.subtext}`}>{u.email}</td>
                 <td className="p-3"><Badge t={t} tone={u.role === "admin" ? "success" : "default"}>{u.role}</Badge></td>
                 <td className="p-3">
                   {u.user_id === currentUser.user_id ? <span className={t.subtext}>Protected</span> : (
-                    <button disabled={saving === `role-${u.user_id}`} onClick={() => changeRole(u, u.role === "admin" ? "customer" : "admin")} className="text-brand hover:underline font-medium disabled:opacity-50">
+                    <div className="flex flex-col items-start gap-1"><button disabled={saving === `role-${u.user_id}`} onClick={() => changeRole(u, u.role === "admin" ? "customer" : "admin")} className="text-brand hover:underline font-medium disabled:opacity-50">
                       {saving === `role-${u.user_id}` ? "Saving…" : u.role === "admin" ? "Make customer" : "Make admin"}
-                    </button>
+                    </button><button disabled={saving === "delete-profiles"} onClick={() => deleteProfiles([u.user_id])} className="text-red-600 hover:underline font-medium disabled:opacity-50">Delete profile</button></div>
                   )}
                 </td>
               </tr>)}
@@ -1289,30 +1409,30 @@ function AdminPage({ t, currentUser }) {
         <div className={`p-5 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${t.divider}`}>
           <div>
             <h2 className={`font-semibold ${t.text}`}>Bookings & Tickets</h2>
-            <p className={`text-sm mt-1 ${t.subtext}`}>One row per booking passenger. Edit passenger details or cancel the booking from this list.</p>
+            <p className={`text-sm mt-1 ${t.subtext}`}>Select passenger tickets to cancel or delete cancelled tickets in bulk.</p>
           </div>
           <input value={ticketFilter} onChange={(e) => setTicketFilter(e.target.value)} placeholder="Filter by PNR, name or train…"
             className={`px-3.5 py-2 rounded-lg border text-sm w-full sm:w-64 ${t.inputBg}`} />
         </div>
+        <div className="px-5 pb-3 flex flex-wrap gap-2">
+          <label className={`mr-auto inline-flex items-center gap-2 text-sm ${t.subtext}`}><input type="checkbox" checked={allVisibleTicketsSelected} onChange={(event) => setSelectedTicketIds((previous) => { const next = new Set(previous); visibleTicketIds.forEach((id) => event.target.checked ? next.add(id) : next.delete(id)); return next; })} />Select all filtered rows</label>
+          <button disabled={!selectedActiveTicketIds.length || saving === "bulk-cancel-tickets"} onClick={bulkCancelTickets} className="rounded-lg border border-amber-300 px-3 py-2 text-sm font-semibold text-amber-700 disabled:opacity-40">{saving === "bulk-cancel-tickets" ? "Cancelling…" : `Cancel selected (${selectedActiveTicketIds.length})`}</button>
+          <button disabled={!selectedCancelledTicketIds.length || saving === "bulk-delete-tickets"} onClick={bulkDeleteTickets} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 disabled:opacity-40">{saving === "bulk-delete-tickets" ? "Deleting…" : `Delete cancelled (${selectedCancelledTicketIds.length})`}</button>
+        </div>
         <ErrorBanner message={ticketError} />
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className={t.cardAltBg}><tr><th className={`p-3 font-semibold ${t.subtext}`}>PNR / Customer</th><th className={`p-3 font-semibold ${t.subtext}`}>Passenger</th><th className={`p-3 font-semibold ${t.subtext}`}>Journey / Train</th><th className={`p-3 font-semibold ${t.subtext}`}>Seat</th><th className={`p-3 font-semibold ${t.subtext}`}>Status</th><th className={`p-3 font-semibold ${t.subtext}`}>Actions</th></tr></thead>
+            <thead className={t.cardAltBg}><tr><th className="p-3"></th><th className={`p-3 font-semibold ${t.subtext}`}>PNR / Customer</th><th className={`p-3 font-semibold ${t.subtext}`}>Passenger</th><th className={`p-3 font-semibold ${t.subtext}`}>Journey / Train</th><th className={`p-3 font-semibold ${t.subtext}`}>Seat</th><th className={`p-3 font-semibold ${t.subtext}`}>Status</th><th className={`p-3 font-semibold ${t.subtext}`}>Actions</th></tr></thead>
             <tbody>
-              {!tickets && <tr><td colSpan="6" className={`p-4 ${t.subtext}`}>Loading tickets…</td></tr>}
-              {tickets && tickets.length === 0 && <tr><td colSpan="6" className={`p-4 ${t.subtext}`}>No booking records yet.</td></tr>}
-              {tickets && tickets
-                .filter((tk) => {
-                  const q = ticketFilter.trim().toLowerCase();
-                  if (!q) return true;
-                  return [tk.pnr_number, tk.passenger_name, tk.train_name, tk.first_name, tk.last_name]
-                    .some((v) => (v || "").toLowerCase().includes(q));
-                })
-                .map((tk) => {
+              {!tickets && <tr><td colSpan="7" className={`p-4 ${t.subtext}`}>Loading tickets…</td></tr>}
+              {tickets && tickets.length === 0 && <tr><td colSpan="7" className={`p-4 ${t.subtext}`}>No booking records yet.</td></tr>}
+              {tickets && tickets.length > 0 && filteredTickets.length === 0 && <tr><td colSpan="7" className={`p-4 ${t.subtext}`}>No rows match this filter.</td></tr>}
+              {tickets && filteredTickets.map((tk) => {
                   const editing = Boolean(tk.ticket_id) && editingTicket === tk.ticket_id;
+                  const status = tk.ticket_status === "cancelled" ? "cancelled" : tk.booking_status;
                   return (
                     <tr key={tk.ticket_id || tk.pnr_number} className={`border-t ${t.divider}`}>
-                      <td className={`p-3 ${t.text}`}><p className="font-medium">{tk.pnr_number}</p><p className={t.subtext}>{tk.first_name} {tk.last_name}<br />{tk.email}</p></td>
+                      <td className="p-3">{tk.ticket_id && <input type="checkbox" aria-label={`Select ticket ${tk.ticket_id}`} checked={selectedTicketIds.has(tk.ticket_id)} onChange={(event) => setSelectedTicketIds((previous) => { const next = new Set(previous); event.target.checked ? next.add(tk.ticket_id) : next.delete(tk.ticket_id); return next; })} />}</td><td className={`p-3 ${t.text}`}><p className="font-medium">{tk.pnr_number}</p><p className={t.subtext}>{tk.first_name} {tk.last_name}<br />{tk.email}</p></td>
                       <td className="p-3">
                         {editing ? (
                           <div className="flex gap-2">
@@ -1330,7 +1450,7 @@ function AdminPage({ t, currentUser }) {
                       </td>
                       <td className={`p-3 ${t.subtext}`}>{tk.starts_at_station} → {tk.ends_at_station}<br />{tk.train_name || "—"}{tk.departure_date ? ` · ${fmtDate(tk.departure_date)}` : ""}</td>
                       <td className={`p-3 ${t.subtext}`}>{tk.seat_number ? <>Coach {tk.coach_number} · {tk.seat_number}<br />{tk.coach_type}</> : "—"}</td>
-                      <td className="p-3"><Badge t={t} tone={tk.booking_status === "confirmed" ? "success" : tk.booking_status === "pending" ? "warn" : "danger"}>{tk.booking_status}</Badge></td>
+                      <td className="p-3"><Badge t={t} tone={status === "confirmed" ? "success" : status === "pending" ? "warn" : "danger"}>{status}</Badge></td>
                       <td className="p-3">
                         {editing ? (
                           <div className="flex gap-2">
@@ -1341,8 +1461,9 @@ function AdminPage({ t, currentUser }) {
                           </div>
                         ) : (
                           <div className="flex flex-col items-start gap-1">
-                            {tk.ticket_id && <button onClick={() => startEditTicket(tk)} className="text-brand hover:underline font-medium">Edit passenger</button>}
-                            {["pending", "confirmed"].includes(tk.booking_status) && <button disabled={saving === `booking-${tk.pnr_number}`} onClick={() => cancelBooking(tk.pnr_number)} className="text-red-600 hover:underline font-medium disabled:opacity-50">{saving === `booking-${tk.pnr_number}` ? "Cancelling…" : "Cancel booking"}</button>}
+                            {tk.ticket_id && tk.ticket_status === "active" && ["pending", "confirmed"].includes(tk.booking_status) && <button disabled={saving === `cancel-ticket-${tk.ticket_id}`} onClick={() => cancelTicket(tk)} className="text-amber-700 hover:underline font-medium disabled:opacity-50">{saving === `cancel-ticket-${tk.ticket_id}` ? "Cancelling…" : "Cancel ticket"}</button>}
+                            {tk.ticket_id && tk.ticket_status === "cancelled" && <button disabled={saving === `delete-ticket-${tk.ticket_id}`} onClick={() => deleteTicket(tk)} className="text-red-600 hover:underline font-medium disabled:opacity-50">{saving === `delete-ticket-${tk.ticket_id}` ? "Deleting…" : "Delete ticket"}</button>}
+                            {tk.ticket_id && tk.ticket_status === "active" && <button onClick={() => startEditTicket(tk)} className="text-brand hover:underline font-medium">Edit passenger</button>}
                           </div>
                         )}
                       </td>
@@ -1380,7 +1501,7 @@ function ClassInfoPage({ t }) {
           <div key={c.coach_type} className={`rounded-xl border p-5 ${t.cardBg}`}>
             <div className="flex items-center justify-between mb-3">
               <h2 className={`font-semibold ${t.text}`}>{c.coach_type}</h2>
-              <span className="text-sm font-semibold text-brand">৳{c.fare ?? "—"}</span>
+              <span className="text-sm font-semibold text-brand">৳{c.fare_per_km ?? "—"} / km</span>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <InfoRow t={t} label="Seat Type" value={c.seatType} />
@@ -1483,8 +1604,7 @@ function ContactPage({ t, currentUser }) {
 
 /* ============================== Root App ============================== */
 
-function CustomerAssistant({ t, stations, onUseJourney }) {
-  const [open, setOpen] = useState(false);
+function CustomerAssistant({ t, stations, page, assistantChoices, assistantPaymentMethod, onUseJourney, onNavigate, onChooseSelection, open, setOpen }) {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -1492,6 +1612,15 @@ function CustomerAssistant({ t, stations, onUseJourney }) {
   const endRef = React.useRef(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [messages, busy, open]);
+
+  const chooseResult = (selection) => {
+    const lastUserMessage = [...messages].reverse().find((item) => item.role === "user")?.content || "";
+    const bangla = assistantUsesBangla(lastUserMessage);
+    const selectedText = bangla ? `${selection.label} বেছে নিয়েছেন।` : `Selected ${selection.label}.`;
+    const nextPage = selection.type === "train" ? "coach" : "seats";
+    setMessages((current) => [...current, { role: "assistant", content: `${selectedText} ${assistantStepPrompt(nextPage, bangla)}` }]);
+    onChooseSelection(selection);
+  };
 
   const send = async (event) => {
     event?.preventDefault();
@@ -1501,11 +1630,53 @@ function CustomerAssistant({ t, stations, onUseJourney }) {
     setMessages(next);
     setDraft("");
     setError("");
+    const destination = assistantDestination(content);
+    if (destination) {
+      setMessages((current) => [...current, { role: "assistant", content: destination.message }]);
+      onNavigate(destination.page);
+      return;
+    }
+    const selection = matchAssistantChoice(content, page, assistantChoices);
+    if (selection) {
+      const nextPage = selection.type === "train" ? "coach" : selection.type === "coach" ? "seats" : selection.type === "paymentMethod" ? "payment" : "passenger";
+      const bangla = assistantUsesBangla(content);
+      const selectedText = bangla ? `${selection.label} বেছে নিয়েছেন।` : `Selected ${selection.label}.`;
+      const followup = selection.type === "paymentMethod"
+        ? (bangla ? "পেমেন্টের পরিমাণ যাচাই করে বুকিং নিশ্চিত করতে Pay চাপবেন কি?" : "Please review the amount. Would you like to select Pay to confirm the booking?")
+        : assistantStepPrompt(nextPage, bangla);
+      setMessages((current) => [...current, { role: "assistant", content: `${selectedText} ${followup}` }]);
+      onChooseSelection(selection);
+      return;
+    }
     setBusy(true);
     try {
-      const result = await api("/assistant/chat", { method: "POST", body: { messages: next.slice(-10) } });
-      setMessages((current) => [...current, { role: "assistant", content: result.reply, journey: result.journey || null }]);
-    } catch (e) { setError(e.message.includes("GEMINI_API_KEY") ? "AI assistant setup required. Add GEMINI_API_KEY to the server environment." : e.message); }
+      const optionType = { results: "train", coach: "coach", seats: "seat" }[page];
+      const pageOptions = page === "payment"
+        ? ["bKash", "Nagad", "Card"].map((label) => ({ label, type: "paymentMethod" }))
+        : (assistantChoices || []).filter((item) => item.type === optionType).map(({ label, type }) => ({ label, type }));
+      const contextualMessages = next.slice(-10).map((item) => ({
+        role: item.role,
+        content: item.data ? `${item.content}\nVerified railway results:\n${assistantDataSummary(item.data)}` : item.content,
+      }));
+      const result = await api("/assistant/chat", { method: "POST", body: { messages: contextualMessages, page, options: pageOptions } });
+      const journey = result.journey || null;
+      const reply = journey && !journey.date
+        ? "What date would you like to travel? I’ve filled in your route on the search form."
+        : journey ? `${result.reply}\n\nI’ve opened the matching train results. Choose a train and class to continue.` : result.reply;
+      const languageBangla = assistantUsesBangla(content);
+      const nextStep = journey && !journey.date
+        ? (languageBangla ? "ভ্রমণের তারিখটি বেছে বলুন। চাইলে আপনার পছন্দের শ্রেণিও জানাতে পারেন।" : "Please choose your travel date. You can also tell me your preferred class.")
+        : assistantStepPrompt(journey?.date ? "results" : page, languageBangla, assistantPaymentMethod);
+      setMessages((current) => [...current, { role: "assistant", content: `${reply}\n\n${nextStep}`, data: result.data || null }]);
+      if (journey) onUseJourney(journey);
+    } catch (e) {
+      const bangla = assistantUsesBangla(content);
+      const unavailable = bangla ? "দুঃখিত, এখন উত্তর তৈরি করা যাচ্ছে না।" : "Sorry, I can’t generate an answer right now.";
+      // Keep the server/API error visible so missing credentials, quota limits,
+      // and other failures can be fixed instead of hiding them behind a generic reply.
+      const detail = typeof e?.message === "string" && e.message.trim() ? e.message.trim() : "Please try again.";
+      setMessages((current) => [...current, { role: "assistant", content: `${unavailable} ${detail} ${assistantStepPrompt(page, bangla, assistantPaymentMethod)}` }]);
+    }
     finally { setBusy(false); }
   };
 
@@ -1520,12 +1691,13 @@ function CustomerAssistant({ t, stations, onUseJourney }) {
       </header>
       <div className="assistant-messages flex-1 space-y-3 overflow-y-auto p-4" aria-live="polite">
         {messages.length === 0 && <div>
-          <div className="assistant-bubble assistant-answer rounded-2xl rounded-tl-sm px-3.5 py-3 text-sm">Hello! আমি আপনাকে ট্রেন খুঁজতে, বুকিং বুঝতে বা টিকিট সংক্রান্ত প্রশ্নে সাহায্য করতে পারি। কীভাবে সাহায্য করব?</div>
+          <div className="assistant-bubble assistant-answer rounded-2xl rounded-tl-sm px-3.5 py-3 text-sm">Hello! I can help you search trains, choose seats, manage bookings, or verify a ticket. কীভাবে সাহায্য করতে পারি?</div>
           <div className="mt-3 flex flex-wrap gap-2">{suggestions.map((item) => <button key={item} onClick={() => setDraft(item)} className={`rounded-full border px-3 py-1.5 text-xs ${t.primaryOutline}`}>{item}</button>)}</div>
         </div>}
         {messages.map((message, index) => <div key={`${message.role}-${index}`} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
           <div className={`assistant-bubble max-w-[88%] rounded-2xl px-3.5 py-3 text-sm leading-relaxed ${message.role === "user" ? "assistant-question rounded-tr-sm" : `assistant-answer rounded-tl-sm ${t.text}`}`}>
             <p className="whitespace-pre-wrap">{message.content}</p>
+            {message.data && <AssistantResultCards data={message.data} t={t} assistantChoices={assistantChoices} onChooseSelection={chooseResult} onUseJourney={onUseJourney} />}
             {message.journey && <div className={`mt-3 rounded-xl border p-3 ${t.cardAltBg}`}>
               <p className={`font-semibold ${t.text}`}>{stationName(message.journey.from)} → {stationName(message.journey.to)}</p>
               {message.journey.date && <p className={`mt-1 text-xs ${t.subtext}`}>Date: {message.journey.date}</p>}
@@ -1539,7 +1711,7 @@ function CustomerAssistant({ t, stations, onUseJourney }) {
         <div ref={endRef} />
       </div>
       <form onSubmit={send} className={`flex items-end gap-2 border-t p-3 ${t.divider}`}>
-        <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send(); } }} rows={1} maxLength={1200} placeholder="Ask in বাংলা or English…" aria-label="Message the assistant" className={`max-h-24 min-h-10 flex-1 resize-y rounded-xl border px-3 py-2.5 text-sm ${t.inputBg}`} />
+        <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send(); } }} rows={1} maxLength={1200} spellCheck={false} placeholder="Type in বাংলা or English…" aria-label="Message the assistant" className={`max-h-24 min-h-10 flex-1 resize-y rounded-xl border px-3 py-2.5 text-sm ${t.inputBg}`} />
         <button type="submit" disabled={busy || !draft.trim()} className="h-10 rounded-xl bg-brand px-4 text-sm font-bold text-white disabled:opacity-50">Send</button>
       </form>
     </section>}
@@ -1549,8 +1721,227 @@ function CustomerAssistant({ t, stations, onUseJourney }) {
   </>;
 }
 
+function ProfilePage({ t, currentUser, go }) {
+  const birthDate = currentUser.date_of_birth ? new Date(`${currentUser.date_of_birth.slice(0, 10)}T00:00:00`).toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" }) : "Not provided";
+  return <div className="max-w-2xl mx-auto px-4 py-10">
+    <div className="mb-5"><h1 className={`text-2xl font-bold tracking-tight ${t.text}`}>Profile</h1><p className={`mt-1 text-sm ${t.subtext}`}>Your account details and settings.</p></div>
+    <div className={`rounded-xl border p-5 grid gap-4 sm:grid-cols-2 ${t.cardBg}`}>
+      <InfoRow t={t} label="First name" value={currentUser.first_name} />
+      <InfoRow t={t} label="Last name" value={currentUser.last_name} />
+      <InfoRow t={t} label="Date of birth" value={birthDate} />
+      <InfoRow t={t} label="Email address" value={currentUser.email} />
+      <InfoRow t={t} label="Account type" value={currentUser.role === "admin" ? "Administrator" : "Customer"} />
+    </div>
+    <div className="mt-5 flex flex-wrap gap-3">
+      <PrimaryButton t={t} onClick={() => go("editprofile")}>Edit Profile</PrimaryButton>
+      <OutlineButton t={t} onClick={() => go("changepassword")}>Change Password</OutlineButton>
+      <OutlineButton t={t} onClick={() => go("mybookings")}>My Bookings</OutlineButton>
+    </div>
+  </div>;
+}
+
+function EditProfilePage({ t, currentUser, onProfileUpdated, go }) {
+  const [profile, setProfile] = useState({ first_name: currentUser.first_name || "", last_name: currentUser.last_name || "", date_of_birth: currentUser.date_of_birth?.slice(0, 10) || "" });
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const update = (key, value) => setProfile((previous) => ({ ...previous, [key]: value }));
+  const submit = async (event) => {
+    event.preventDefault(); setError(""); setSaving(true);
+    try { const result = await api("/auth/profile", { method: "PUT", body: { ...profile, current_password: currentPassword } }); onProfileUpdated(result.user); go("account"); }
+    catch (failure) { setError(failure.message); }
+    finally { setSaving(false); }
+  };
+  return <div className="max-w-xl mx-auto px-4 py-10">
+    <BackBar t={t} onBack={() => go("account")} label="Back to Profile" />
+    <form onSubmit={submit} className={`rounded-xl border p-5 space-y-4 ${t.cardBg}`}>
+      <div><h1 className={`text-xl font-bold ${t.text}`}>Edit Profile</h1><p className={`mt-1 text-sm ${t.subtext}`}>Email address cannot be changed here. Confirm your current password to save profile changes.</p></div>
+      <Field label="First name" t={t}><input required maxLength={50} value={profile.first_name} onChange={(event) => update("first_name", event.target.value)} autoComplete="given-name" className={`w-full px-3.5 py-2.5 border text-sm ${t.inputBg}`} /></Field>
+      <Field label="Last name" t={t}><input required maxLength={50} value={profile.last_name} onChange={(event) => update("last_name", event.target.value)} autoComplete="family-name" className={`w-full px-3.5 py-2.5 border text-sm ${t.inputBg}`} /></Field>
+      <Field label="Date of birth (you must be at least 18)" t={t}><input required type="date" max={latestEligibleBirthDate()} value={profile.date_of_birth} onChange={(event) => update("date_of_birth", event.target.value)} autoComplete="bday" className={`w-full px-3.5 py-2.5 border text-sm ${t.inputBg}`} /></Field>
+      <Field label="Current password" t={t}><input required type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className={`w-full px-3.5 py-2.5 border text-sm ${t.inputBg}`} /></Field>
+      <ErrorBanner message={error} />
+      <PrimaryButton t={t} type="submit" disabled={saving}>{saving ? "Saving…" : "Save Profile"}</PrimaryButton>
+    </form>
+  </div>;
+}
+
+function ChangePasswordPage({ t, go }) {
+  const [password, setPassword] = useState({ current_password: "", new_password: "", confirm_password: "" });
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [saving, setSaving] = useState(false);
+  const update = (key, value) => setPassword((previous) => ({ ...previous, [key]: value }));
+  const submit = async (event) => {
+    event.preventDefault(); setError(""); setNotice("");
+    if (password.new_password !== password.confirm_password) { setError("The new passwords do not match."); return; }
+    if (password.new_password.length < 8) { setError("Your new password must be at least 8 characters."); return; }
+    setSaving(true);
+    try {
+      const result = await api("/auth/password/change", { method: "POST", body: { current_password: password.current_password, new_password: password.new_password } });
+      setPassword({ current_password: "", new_password: "", confirm_password: "" }); setNotice(result.message || "Password changed successfully.");
+    } catch (failure) { setError(failure.message); }
+    finally { setSaving(false); }
+  };
+  return <div className="max-w-xl mx-auto px-4 py-10">
+    <BackBar t={t} onBack={() => go("account")} label="Back to Profile" />
+    <form onSubmit={submit} className={`rounded-xl border p-5 space-y-4 ${t.cardBg}`}>
+      <div><h1 className={`text-xl font-bold ${t.text}`}>Change Password</h1><p className={`mt-1 text-sm ${t.subtext}`}>Confirm your current password to choose a new one.</p></div>
+      <Field label="Current password" t={t}><input required type="password" autoComplete="current-password" value={password.current_password} onChange={(event) => update("current_password", event.target.value)} className={`w-full px-3.5 py-2.5 border text-sm ${t.inputBg}`} /></Field>
+      <Field label="New password" t={t}><input required type="password" minLength={8} autoComplete="new-password" value={password.new_password} onChange={(event) => update("new_password", event.target.value)} className={`w-full px-3.5 py-2.5 border text-sm ${t.inputBg}`} /></Field>
+      <Field label="Confirm new password" t={t}><input required type="password" minLength={8} autoComplete="new-password" value={password.confirm_password} onChange={(event) => update("confirm_password", event.target.value)} className={`w-full px-3.5 py-2.5 border text-sm ${t.inputBg}`} /></Field>
+      <ErrorBanner message={error} />{notice && <p role="status" className="text-sm text-green-700">{notice}</p>}
+      <PrimaryButton t={t} type="submit" disabled={saving}>{saving ? "Changing…" : "Change Password"}</PrimaryButton>
+    </form>
+  </div>;
+}
+
+function assistantDestination(message) {
+  const text = message.toLowerCase();
+  const bangla = assistantUsesBangla(message);
+  if (/\b(my\s+)?(previous|past|upcoming|recent|old|prior)?\s*bookings?\b|\bbooking history\b|\bmy trips\b|আগের বুকিং|আমার বুকিং|বুকিং দেখুন/.test(text)) {
+    return { page: "mybookings", message: bangla ? "আপনার বুকিংয়ের পৃষ্ঠা খুলেছি। বিস্তারিত দেখতে কোন আসন্ন বা আগের বুকিংটি খুলতে চান? সাইন ইন চাইলে আগে সাইন ইন করুন।" : "Your bookings page is open. Which upcoming or past booking would you like to open? Sign in if asked." };
+  }
+  if (/\b(verif\w*|check|validate)\b.*\b(ticket|pnr|booking reference)\b|\b(ticket|pnr)\b.*\b(verif\w*|check|status)\b|\bticket verification\b|টিকিট যাচাই|টিকিট পরীক্ষা|পিএনআর/.test(text)) {
+    return { page: "verify", message: bangla ? "টিকিট যাচাইয়ের পৃষ্ঠা খুলেছি। কোন PNR এবং বুকিংয়ের ইমেইল দিয়ে টিকিটটি যাচাই করবেন?" : "Ticket verification is open. Which PNR and booking email would you like to verify?" };
+  }
+  if (/\b(contact|support|send (a )?message|contact us)\b|যোগাযোগ/.test(text)) {
+    return { page: "contact", message: bangla ? "যোগাযোগের পৃষ্ঠা খুলেছি। কী বিষয় ও বার্তা পাঠাতে চান? সাইন ইন চাইলে গ্রাহক হিসেবে সাইন ইন করুন।" : "Contact Us is open. What subject and message would you like to send? Sign in as a customer if asked." };
+  }
+  if (/\b(live status|train status|train location|where (is|'s) (the )?train)\b|ট্রেনের অবস্থা|লাইভ স্ট্যাটাস/.test(text)) {
+    return { page: "status", message: bangla ? "প্রকাশিত ট্রেনের সময়সূচি দেখাচ্ছি। এই সাইটে লাইভ ট্রেনের অবস্থান নেই। কোন রুট বা তারিখ দেখতে চান?" : "The published timetable is open. Live train location is unavailable. Which route or date would you like to check?" };
+  }
+  return null;
+}
+
+function assistantDataSummary(data) {
+  if (data.type === "trains") return data.items.map((item) => `${item.train_name}: ${item.origin_departure} to ${item.destination_arrival}; classes ${item.classes.map((c) => `${c.coach_type} ৳${c.fare} (${c.available} available)`).join(", ")}`).join("\n");
+  if (data.type === "fares") return data.items.map((item) => item.fare == null
+    ? `${item.coach_type}: ৳${item.fare_per_km}/km; provide origin and destination for a trip total.`
+    : `${item.coach_type}: ৳${item.fare} per passenger, ৳${item.total} for ${data.passengers}`).join("\n");
+  if (data.type === "schedules") return data.items.map((item) => `${item.train_name}: ${item.origin_code} ${item.origin_departure_time} to ${item.destination_code} ${item.destination_arrival_time}`).join("\n");
+  return "";
+}
+
+function assistantDisplayTime(value) {
+  // API timestamps are Bangladesh local times without timezone metadata.
+  // Read their clock fields directly so browser timezone settings cannot shift them.
+  const clock = String(value).match(/(?:T|^)(\d{1,2}):(\d{2})/);
+  if (clock) {
+    const hour = Number(clock[1]);
+    return `${hour % 12 || 12}:${clock[2]} ${hour < 12 ? "AM" : "PM"}`;
+  }
+  return new Date(value).toLocaleTimeString("en-BD", { timeZone: "Asia/Dhaka", hour: "2-digit", minute: "2-digit", hour12: true });
+}
+
+function assistantCriteria(filters = {}) {
+  const labels = [];
+  const clock = (value) => assistantDisplayTime(`T${value}`);
+  if (filters.departure_after) labels.push(`Leaves after ${clock(filters.departure_after)}`);
+  if (filters.departure_before) labels.push(`Leaves by ${clock(filters.departure_before)}`);
+  if (filters.arrival_after) labels.push(`Arrives after ${clock(filters.arrival_after)}`);
+  if (filters.arrival_before) labels.push(`Arrives by ${clock(filters.arrival_before)}`);
+  if (filters.max_duration_minutes != null) labels.push(`Journey up to ${Math.floor(filters.max_duration_minutes / 60)}h ${filters.max_duration_minutes % 60}m`);
+  if (filters.coach) labels.push(`Class: ${filters.coach}`);
+  if (filters.max_fare != null) labels.push(`Fare up to ৳${filters.max_fare}`);
+  if (filters.passengers != null) labels.push(`Seats for ${filters.passengers} passengers`);
+  if (filters.overnight_allowed === false) labels.push("No overnight travel");
+  if (filters.preference === "cheapest") labels.push("Cheapest first");
+  if (filters.preference === "fastest") labels.push("Fastest first");
+  if (filters.preference === "earliest") labels.push("Earliest departure first");
+  if (filters.preference === "latest") labels.push("Latest departure first");
+  return labels;
+}
+
+function AssistantResultCards({ data, t, stations, assistantChoices, onChooseSelection, onUseJourney }) {
+  if (!data) return null;
+  const criteria = assistantCriteria(data.criteria);
+  if (data.type === "trains") return <div className="mt-3 space-y-2">
+    {data.items.map((train) => <article key={train.trip_id} className={`rounded-xl border p-3 ${t.cardAltBg}`}>
+      <div className="flex items-start justify-between gap-2"><div><h3 className={`font-bold ${t.text}`}>🚆 {train.train_name}</h3><p className={`text-xs ${t.subtext}`}>Train {train.train_id}</p></div><span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">Scheduled</span></div>
+      <p className={`mt-2 text-sm ${t.text}`}>{assistantDisplayTime(train.origin_departure)} → {assistantDisplayTime(train.destination_arrival)}</p>
+      <p className={`text-xs ${t.subtext}`}>{(train.stops || []).find((stop) => stop.station_code === train.origin_station_code)?.city || train.origin_station_code} &rarr; {(train.stops || []).find((stop) => stop.station_code === train.destination_station_code)?.city || train.destination_station_code}</p>
+      <p className={`text-xs ${t.subtext}`}>Duration: {Math.floor(train.duration_minutes / 60)}h {train.duration_minutes % 60}m · Stops: {(train.stops || []).map((stop) => stop.city).join(" → ")}</p>
+      {criteria.length > 0 && <p className="mt-2 text-xs leading-relaxed text-emerald-700">{criteria.map((item) => `✓ ${item}`).join(" · ")}</p>}
+      <div className="mt-2 space-y-1">{train.classes.map((item) => {
+        const option = assistantChoices.find((choice) => choice.type === "train" && choice.tripId === train.trip_id && choice.klass === item.coach_type);
+        return <div key={item.coach_type} className="flex items-center justify-between gap-2 text-xs"><span className={t.text}>{item.coach_type} · ৳{item.fare}/person · {item.available} available</span>{option && <button onClick={() => onChooseSelection(option)} className="rounded-lg bg-brand px-2.5 py-1.5 font-semibold text-white">Select</button>}</div>;
+      })}</div>
+    </article>)}
+    {data.items.length === 0 && <p className={`rounded-xl border p-3 text-sm ${t.subtext}`}>No trains matched the requested filters.</p>}
+  </div>;
+  if (data.type === "fares") return <div className="mt-3 space-y-2">{data.trains?.map((train) => <p key={train.train_id} className={`font-semibold ${t.text}`}>🚆 {train.train_name}</p>)}<div className={`rounded-xl border p-3 ${t.cardAltBg}`}><p className={`mb-2 text-xs ${t.subtext}`}>{data.distance_km ? `${data.distance_km} km · ${data.passengers} passenger${data.passengers === 1 ? "" : "s"}` : "Indicative rate · fare depends on journey distance"}</p>{data.items.map((item) => <div key={item.coach_type} className={`flex justify-between gap-3 text-sm ${t.text}`}><span>{item.coach_type} · {item.fare == null ? `৳${item.fare_per_km}/km` : `৳${item.fare}/person`}</span><b>{item.total == null ? "Choose stations for total" : `৳${item.total}`}</b></div>)}</div></div>;
+  if (data.type === "schedules") return <div className="mt-3 space-y-2">{data.items.map((item) => <article key={`${item.train_id}-${item.origin_code}-${item.destination_code}`} className={`rounded-xl border p-3 ${t.cardAltBg}`}><h3 className={`font-bold ${t.text}`}>&#128646; {item.train_name}</h3><p className={`text-xs ${t.subtext}`}>Train {item.train_id}</p><p className={`mt-2 text-sm ${t.text}`}>{item.origin_city || item.origin_code} &middot; {assistantDisplayTime(`T${item.origin_departure_time}`)} &rarr; {item.destination_city || item.destination_code} &middot; {assistantDisplayTime(`T${item.destination_arrival_time}`)}</p>{item.duration_minutes != null && <p className={`text-xs ${t.subtext}`}>Duration: {Math.floor(item.duration_minutes / 60)}h {item.duration_minutes % 60}m</p>}<p className={`text-xs ${t.subtext}`}>Stops: {(item.stops || []).map((stop) => stop.city).join(" &rarr; ")}</p><button type="button" onClick={() => onUseJourney({ from: item.origin_code, to: item.destination_code, date: null, coach: "" })} className="mt-2 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-semibold text-white">Search this route</button></article>)}{data.items.length === 0 && <p className={`rounded-xl border p-3 text-sm ${t.subtext}`}>No matching published schedules were found.</p>}</div>;
+  return null;
+}
+
+function matchAssistantChoice(message, page, choices = []) {
+  const text = message.toLowerCase();
+  if (page === "results") {
+    const options = choices.filter((item) => item.type === "train");
+    let matches = options.filter((item) => text.includes(item.trainName.toLowerCase()) && text.includes(item.klass.toLowerCase()));
+    if (!matches.length) {
+      matches = options.filter((item) => text.includes(item.trainName.toLowerCase()));
+      const trainIds = new Set(matches.map((item) => item.tripId));
+      if (trainIds.size === 1) {
+        const available = matches.filter((item) => item.tripId === matches[0].tripId);
+        if (available.length === 1) matches = available;
+        else return null;
+      }
+    }
+    return matches.length === 1 ? matches[0] : null;
+  }
+  if (page === "coach") {
+    const options = choices.filter((item) => item.type === "coach");
+    const matches = options.filter((item) => text.includes(item.label.toLowerCase()));
+    return matches.length === 1 ? matches[0] : null;
+  }
+  if (page === "seats") {
+    const options = choices.filter((item) => item.type === "seat");
+    const matches = options.filter((item) => {
+      const seat = String(item.seat.seat_number).toLowerCase();
+      const numberTokens = text.match(/[a-z]?\d+/g) || [];
+      return text.includes(item.label.toLowerCase()) || numberTokens.includes(seat);
+    });
+    const numbers = [...text.matchAll(/\b\d+\b/g)].map((match) => match[0]);
+    const selected = matches.length ? matches : options.filter((item) => numbers.includes(String(item.seat.seat_number)));
+    if (!selected.length || selected.length > 5) return null;
+    return { type: "seats", label: selected.map((item) => item.label).join(", "), seats: selected.map((item) => item.seat) };
+  }
+  if (page === "payment") {
+    const method = ["bKash", "Nagad", "Card"].find((item) => text.includes(item.toLowerCase()));
+    return method ? { type: "paymentMethod", label: method, method } : null;
+  }
+  return null;
+}
+
+function assistantUsesBangla(message) {
+  return /[\u0980-\u09FF]/.test(message) || /\b(ami|amar|chai|jabo|theke|kibhabe|korbo|dekhao|lagbe|kobe|tarikh|dorkar|hobe|dekhte|bujhte)\b/i.test(message);
+}
+
+function assistantStepPrompt(page, bangla, selectedPaymentMethod = "") {
+  const steps = {
+    home: ["Choose your origin, destination, travel date, and optionally a class, then search. What journey would you like to search?", "যাত্রার শুরু ও গন্তব্য, তারিখ এবং চাইলে শ্রেণি বেছে সার্চ করুন। কোন যাত্রাটি খুঁজবেন?"],
+    results: ["Choose one train and an available class; the next page lets you choose a coach. Which train and class do you want?", "একটি ট্রেন ও উপলভ্য শ্রেণি বেছে নিন; পরের পাতায় কোচ বেছে নিতে পারবেন। কোন ট্রেন ও শ্রেণি বেছে নেবেন?"],
+    coach: ["Choose one of the displayed coaches for your selected class. Which coach would you like?", "আপনার নির্বাচিত শ্রেণির প্রদর্শিত কোচগুলোর মধ্যে একটি বেছে নিন। কোন কোচটি নেবেন?"],
+    seats: ["Choose up to five available seats. Held or sold seats cannot be selected. Which seats would you like?", "সর্বোচ্চ পাঁচটি খালি আসন বেছে নিন। সংরক্ষিত বা বিক্রি হওয়া আসন নেওয়া যাবে না। কোন আসনগুলো নেবেন?"],
+    passenger: ["Enter each passenger’s name and age in the fields, then continue to payment. Have you entered both for every passenger?", "ফর্মে প্রতিটি যাত্রীর নাম ও বয়স লিখে পেমেন্টে এগিয়ে যান। সবার জন্য দুটিই লিখেছেন কি?"],
+    payment: selectedPaymentMethod
+      ? [`${selectedPaymentMethod} is selected. Review the amount and choose Pay to confirm. Would you like to continue?`, `${selectedPaymentMethod} বেছে নেওয়া হয়েছে। পরিমাণ দেখে বুকিং নিশ্চিত করতে Pay চাপুন। এগোবেন কি?`]
+      : ["Choose bKash, Nagad, or Card, then select Pay to confirm the booking. Which payment method would you like?", "bKash, Nagad অথবা Card বেছে নিয়ে Pay চাপুন। কোন পেমেন্ট পদ্ধতিটি নেবেন?"],
+    ticket: ["Review the booking, passenger, seat, and payment details. Choose My Bookings or search again. What would you like to do next?", "বুকিং, যাত্রী, আসন ও পেমেন্টের তথ্য দেখুন। My Bookings অথবা আবার সার্চ বেছে নিন। এরপর কী করতে চান?"],
+    mybookings: ["Choose an upcoming or past booking to view its details. Which booking would you like to open?", "বিস্তারিত দেখতে আসন্ন বা আগের বুকিংগুলোর একটি বেছে নিন। কোন বুকিংটি খুলবেন?"],
+    verify: ["Enter the ticket PNR and booking email to verify it. Which ticket would you like to check?", "টিকিট যাচাই করতে PNR ও বুকিংয়ের ইমেইল লিখুন। কোন টিকিটটি যাচাই করবেন?"],
+    contact: ["Enter a subject and message, then submit the contact form. What would you like to ask us?", "বিষয় ও বার্তা লিখে যোগাযোগের ফর্মটি পাঠান। কী জানতে চান?"],
+    status: ["Choose a route and date to view published train times. Live location is unavailable. Which route or date should I show?", "প্রকাশিত ট্রেনের সময় দেখতে রুট ও তারিখ বেছে নিন। লাইভ অবস্থান পাওয়া যায় না। কোন রুট বা তারিখ দেখাব?"],
+  };
+  const pair = steps[page] || steps.home;
+  return pair[bangla ? 1 : 0];
+}
+
 function App() {
   const { theme, setTheme, t } = useTheme();
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const [page, setPage] = useState(pageFromLocation);
   const [currentUser, setCurrentUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -1561,6 +1952,9 @@ function App() {
   const [search, setSearch] = useState({ from: "DHK", to: "CTG", date: todayISO(), klass: "" });
   const [searchError, setSearchError] = useState("");
   const [ctx, setCtx] = useState({});
+  const [assistantChoices, setAssistantChoices] = useState([]);
+  const [assistantPaymentMethod, setAssistantPaymentMethod] = useState("");
+  const publishAssistantChoices = useCallback((choices) => setAssistantChoices(choices), []);
 
   useEffect(() => {
     api("/stations", { auth: false }).then(setStations).catch(() => setStations([]));
@@ -1604,7 +1998,7 @@ function App() {
   useEffect(() => {
     if (!authChecked) return;
     if (AUTH_ONLY_PAGES.has(page) && !currentUser) {
-      if (page === "contact") setPendingPage("contact");
+      if (page === "contact" || page === "mybookings") setPendingPage(page);
       go("login", {}, { replace: true });
       return;
     }
@@ -1676,9 +2070,26 @@ function App() {
   };
 
   const useAssistantJourney = (journey) => {
-    setSearch((current) => ({ ...current, from: journey.from, to: journey.to, date: journey.date || current.date, klass: journey.coach || "" }));
-    go("home");
-    window.setTimeout(() => document.getElementById("search-card")?.scrollIntoView({ behavior: "smooth", block: "center" }), 140);
+    const nextSearch = { ...search, from: journey.from, to: journey.to, date: journey.date || search.date, klass: journey.coach || "", filters: journey.filters || null };
+    setSearch(nextSearch);
+    setSearchError("");
+    if (!journey.date) {
+      go("home");
+      window.setTimeout(() => document.getElementById("search-card")?.scrollIntoView({ behavior: "smooth", block: "center" }), 140);
+      return;
+    }
+    if (!currentUser) {
+      setPendingSearch(nextSearch);
+      go("login");
+      return;
+    }
+    go("results");
+  };
+
+  const navigateFromAssistant = (destination) => {
+    setPendingSearch(null);
+    if (destination === "status") { goAnchor("scheduled-trains"); return; }
+    go(destination);
   };
 
   // Enrich ctx with station city names + derived fields whenever we move
@@ -1696,23 +2107,35 @@ function App() {
     go(p, enriched);
   };
 
+  const chooseAssistantSelection = (selection) => {
+    if (selection.type === "paymentMethod") {
+      setAssistantPaymentMethod(selection.method);
+    } else if (selection.type === "train") {
+      goBooking("coach", { tripId: selection.tripId, klass: selection.klass, fare: selection.fare });
+    } else if (selection.type === "coach") {
+      goBooking("seats", { coach: selection.coach, trainName: selection.trainName, date: selection.date });
+    } else if (selection.type === "seats") {
+      goBooking("passenger", { seats: selection.seats });
+    }
+  };
+
   let body;
   if (!authChecked) {
     body = <div className="max-w-4xl mx-auto px-4 py-16 text-center text-sm text-neutral-400">Loading…</div>;
   } else if (page === "home") {
-    body = <HomePage t={t} search={search} setSearch={setSearch} doSearch={doSearch} searchError={searchError} stations={stations} classTypes={classTypes} go={go} onAnchor={goAnchor} />;
+    body = <HomePage t={t} search={search} setSearch={setSearch} doSearch={doSearch} searchError={searchError} stations={stations} classTypes={classTypes} go={go} onAnchor={goAnchor} onOpenAssistant={() => setAssistantOpen(true)} />;
   } else if (page === "login") {
     body = <LoginPage t={t} pendingSearch={pendingSearch} onLogin={onLogin} stations={stations} />;
   } else if (page === "results") {
-    body = <ResultsPage t={t} search={search} go={goBooking} stations={stations} currentUser={currentUser} />;
+    body = <ResultsPage t={t} search={search} go={goBooking} stations={stations} currentUser={currentUser} onAssistantChoices={publishAssistantChoices} />;
   } else if (page === "coach" && ctx.tripId) {
-    body = <CoachPage t={t} go={goBooking} ctx={ctx} />;
+    body = <CoachPage t={t} go={goBooking} ctx={ctx} onAssistantChoices={publishAssistantChoices} />;
   } else if (page === "seats" && ctx.coach) {
-    body = <SeatsPage t={t} go={goBooking} ctx={ctx} />;
+    body = <SeatsPage t={t} go={goBooking} ctx={ctx} onAssistantChoices={publishAssistantChoices} />;
   } else if (page === "passenger" && ctx.seats) {
     body = <PassengerPage t={t} go={goBooking} ctx={ctx} currentUser={currentUser} />;
   } else if (page === "payment" && ctx.booking) {
-    body = <PaymentPage t={t} go={goBooking} ctx={ctx} stations={stations} />;
+    body = <PaymentPage t={t} go={goBooking} ctx={ctx} stations={stations} assistantPaymentMethod={assistantPaymentMethod} />;
   } else if (page === "ticket" && ctx.booking) {
     body = <TicketPage t={t} go={goBooking} ctx={ctx} stations={stations} />;
   } else if (page === "mybookings" && currentUser) {
@@ -1732,21 +2155,11 @@ function App() {
   } else if (page === "verify") {
     body = <VerifyTicketPage t={t} />;
   } else if (page === "account" && currentUser) {
-    body = (
-      <div className="max-w-md mx-auto px-4 py-10">
-        <h1 className={`text-2xl font-bold tracking-tight mb-6 ${t.text}`}>Profile</h1>
-        <div className={`rounded-xl border p-5 space-y-3 ${t.cardBg}`}>
-          <InfoRow t={t} label="First Name" value={currentUser.first_name} />
-          <InfoRow t={t} label="Last Name" value={currentUser.last_name} />
-          <InfoRow t={t} label="Email" value={currentUser.email} />
-          <InfoRow t={t} label="Account Type" value={currentUser.role === "admin" ? "Administrator" : "Customer"} />
-        </div>
-        <div className="flex gap-3 mt-5">
-          <OutlineButton t={t} onClick={() => go("mybookings")}>My Bookings</OutlineButton>
-          <PrimaryButton t={t} onClick={logout}>Logout</PrimaryButton>
-        </div>
-      </div>
-    );
+    body = <ProfilePage t={t} currentUser={currentUser} go={go} />;
+  } else if (page === "editprofile" && currentUser) {
+    body = <EditProfilePage t={t} currentUser={currentUser} onProfileUpdated={setCurrentUser} go={go} />;
+  } else if (page === "changepassword" && currentUser) {
+    body = <ChangePasswordPage t={t} go={go} />;
   } else {
     // Unknown or not-yet-authorized page: render nothing while the guard
     // effect above redirects, instead of silently falling back to Home.
@@ -1757,7 +2170,7 @@ function App() {
     <div className={`min-h-screen ${t.pageBg}`}>
       <NavBar page={page} go={(p) => { if (p === "home") setCtx({}); go(p); }} onAnchor={goAnchor} t={t} setTheme={setTheme} currentUser={currentUser} logout={logout} />
       {body}
-      <CustomerAssistant t={t} stations={stations} onUseJourney={useAssistantJourney} />
+      <CustomerAssistant t={t} stations={stations} page={page} assistantChoices={assistantChoices} assistantPaymentMethod={assistantPaymentMethod} onUseJourney={useAssistantJourney} onNavigate={navigateFromAssistant} onChooseSelection={chooseAssistantSelection} open={assistantOpen} setOpen={setAssistantOpen} />
       <footer className={`border-t mt-10 py-6 text-center text-xs ${t.divider} ${t.subtext}`}>
         RailX BD — demonstration/prototype platform, not an official Bangladesh Railway website.
       </footer>

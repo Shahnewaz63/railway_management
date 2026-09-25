@@ -253,6 +253,116 @@ router.patch("/users/:userId/role", async (req, res, next) => {
   }
 });
 
+function parseIdList(value, label) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 500) {
+    throw Object.assign(new Error(`Select between 1 and 500 ${label}.`), { status: 400 });
+  }
+  const ids = [...new Set(value.map(parsePositiveId))];
+  if (ids.some((id) => !id)) throw Object.assign(new Error(`One or more selected ${label} are invalid.`), { status: 400 });
+  return ids;
+}
+
+router.delete("/users/bulk", async (req, res, next) => {
+  let userIds;
+  try { userIds = parseIdList(req.body?.user_ids, "profiles"); }
+  catch (err) { return res.status(err.status || 400).json({ error: err.message }); }
+  if (userIds.includes(req.user.user_id)) return res.status(400).json({ error: "You cannot delete your own administrator profile." });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query("DELETE FROM users WHERE user_id = ANY($1::int[]) RETURNING user_id", [userIds]);
+    if (rows.length !== userIds.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "One or more selected profiles no longer exist. Refresh the dashboard and try again." });
+    }
+    await client.query("COMMIT");
+    res.json({ deleted: rows.length });
+  } catch (err) {
+    await client.query("ROLLBACK"); next(err);
+  } finally { client.release(); }
+});
+
+router.delete("/users/:userId", async (req, res, next) => {
+  const userId = parsePositiveId(req.params.userId);
+  if (!userId) return res.status(400).json({ error: "Invalid profile." });
+  if (userId === req.user.user_id) return res.status(400).json({ error: "You cannot delete your own administrator profile." });
+  try {
+    const { rowCount } = await pool.query("DELETE FROM users WHERE user_id = $1", [userId]);
+    if (!rowCount) return res.status(404).json({ error: "Profile not found." });
+    res.status(204).end();
+  } catch (err) { next(err); }
+});
+
+router.patch("/tickets/bulk-cancel", async (req, res, next) => {
+  let ticketIds;
+  try { ticketIds = parseIdList(req.body?.ticket_ids, "tickets"); }
+  catch (err) { return res.status(err.status || 400).json({ error: err.message }); }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows: selected } = await client.query(
+      `SELECT tk.ticket_id, tk.pnr_number, tk.ticket_status, tk.price, b.booking_status
+       FROM ticket tk JOIN booking b ON b.pnr_number = tk.pnr_number
+       WHERE tk.ticket_id = ANY($1::int[])
+       ORDER BY tk.pnr_number, tk.ticket_id FOR UPDATE OF b, tk`, [ticketIds]
+    );
+    if (selected.length !== ticketIds.length) throw Object.assign(new Error("One or more selected tickets no longer exist. Refresh the dashboard and try again."), { status: 404 });
+    if (selected.some((ticket) => ticket.ticket_status !== "active" || !["pending", "confirmed"].includes(ticket.booking_status))) {
+      throw Object.assign(new Error("Only active tickets in pending or confirmed bookings can be cancelled."), { status: 409 });
+    }
+    const pnrs = [...new Set(selected.map((ticket) => ticket.pnr_number))];
+    for (const pnr of pnrs) {
+      const payment = await client.query("SELECT payment_id FROM payment WHERE pnr_number = $1", [pnr]);
+      const group = selected.filter((ticket) => ticket.pnr_number === pnr);
+      for (const ticket of group) {
+        if (payment.rowCount) {
+          await client.query(
+            `INSERT INTO ticket_refund (ticket_id, payment_id, amount) VALUES ($1,$2,$3)
+             ON CONFLICT (ticket_id) DO NOTHING`, [ticket.ticket_id, payment.rows[0].payment_id, ticket.price]
+          );
+        } else {
+          await client.query("UPDATE booking SET fare = GREATEST(0, fare - $2) WHERE pnr_number = $1", [pnr, ticket.price]);
+        }
+        await client.query("UPDATE ticket SET ticket_status = 'cancelled' WHERE ticket_id = $1", [ticket.ticket_id]);
+      }
+      const { rows: remaining } = await client.query(
+        "SELECT COUNT(*)::int AS count FROM ticket WHERE pnr_number = $1 AND ticket_status = 'active'", [pnr]
+      );
+      if (remaining[0].count === 0) await client.query("UPDATE booking SET booking_status = 'cancelled' WHERE pnr_number = $1", [pnr]);
+    }
+    await client.query("COMMIT");
+    res.json({ cancelled: selected.length });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  } finally { client.release(); }
+});
+
+router.delete("/tickets/bulk-delete", async (req, res, next) => {
+  let ticketIds;
+  try { ticketIds = parseIdList(req.body?.ticket_ids, "tickets"); }
+  catch (err) { return res.status(err.status || 400).json({ error: err.message }); }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query("SELECT ticket_id, ticket_status FROM ticket WHERE ticket_id = ANY($1::int[]) FOR UPDATE", [ticketIds]);
+    if (rows.length !== ticketIds.length) throw Object.assign(new Error("One or more selected tickets no longer exist. Refresh the dashboard and try again."), { status: 404 });
+    if (rows.some((ticket) => ticket.ticket_status !== "cancelled")) {
+      throw Object.assign(new Error("Only cancelled tickets can be permanently deleted."), { status: 409 });
+    }
+    // Remove dependent refunds explicitly for databases created before the cascade constraint.
+    await client.query("DELETE FROM ticket_refund WHERE ticket_id = ANY($1::int[])", [ticketIds]);
+    await client.query("DELETE FROM ticket WHERE ticket_id = ANY($1::int[])", [ticketIds]);
+    await client.query("COMMIT");
+    res.json({ deleted: rows.length });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  } finally { client.release(); }
+});
+
 router.get("/bookings", async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -324,7 +434,7 @@ router.get("/records", async (req, res, next) => {
               t.trip_id, t.departure_date, tr.train_name
        FROM booking b
        JOIN users u ON u.user_id = b.user_id
-       LEFT JOIN ticket tk ON tk.pnr_number = b.pnr_number
+       JOIN ticket tk ON tk.pnr_number = b.pnr_number
        LEFT JOIN seat s ON s.seat_id = tk.seat_id
        LEFT JOIN coach c ON c.coach_id = s.coach_id
        LEFT JOIN trip t ON t.trip_id = tk.trip_id

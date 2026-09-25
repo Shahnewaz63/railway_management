@@ -103,7 +103,7 @@ Use a Google App Password for the Gmail account (with 2-Step Verification enable
 
 ## Customer assistant
 
-The floating RailX assistant answers support questions in English or Bangla and can fill in a requested journey in the train search form. It uses the Gemini API from the Express server with the Gemini 3.5 Flash-Lite model; the API key is never sent to the browser. Add `GEMINI_API_KEY` to `.env` and restart the server to enable AI replies. Without a key, the assistant displays a setup message. Journey suggestions only populate the search form; customers still review results and complete bookings through the normal flow.
+The floating RailX assistant responds in the customer’s language and explains the choices and next step for the current booking page. It can start a journey search from chat: it asks for a missing travel date, then opens matching train results. Customers can name a train, coach, seat(s), or payment method in chat to advance through the corresponding booking pages; passenger names and ages are entered in their form fields. Requests to view previous bookings, contact support, verify a ticket, or see train status open the matching page or timetable section. The timetable contains published times only; live train location is not available. The assistant uses Gemini from the Express server, so the API key is never sent to the browser. Add a valid `GEMINI_API_KEY` to `.env` and restart the server to enable AI replies.
 
 ## 4. Run it
 

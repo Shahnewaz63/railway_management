@@ -1,241 +1,26 @@
-// Populates the schema with reference data (stations, routes, trains,
-// coaches, seats, trips) and one demo user. Safe to re-run: it truncates
-// and rebuilds everything.
-//
-// Usage:  npm run seed   (reads DATABASE_URL from .env)
-
+﻿// Rebuilds all application data, including users and bookings. Use database/sync-network.js
+// when updating only the rail network in a database that already contains customer data.
 require("dotenv").config();
 const bcrypt = require("bcrypt");
 const pool = require("../src/db/pool");
-
-const STATIONS = [
-  ["DHK", "Dhaka Kamalapur Railway Station", "Dhaka"],
-  ["CTG", "Chittagong Railway Station", "Chittagong"],
-  ["SYL", "Sylhet Railway Station", "Sylhet"],
-  ["RAJ", "Rajshahi Railway Station", "Rajshahi"],
-  ["KHL", "Khulna Railway Station", "Khulna"],
-  ["BSL", "Bhairab Bazar Railway Station", "Bhairab"],
-  ["AKR", "Akhaura Railway Station", "Akhaura"],
-  ["COM", "Cumilla Railway Station", "Cumilla"],
-  ["FNI", "Feni Railway Station", "Feni"],
-  ["COX", "Cox's Bazar Railway Station", "Cox's Bazar"],
-  ["LKS", "Laksham Junction", "Laksham"],
-  ["NOK", "Noakhali Railway Station", "Noakhali"],
-  ["MYM", "Mymensingh Railway Station", "Mymensingh"],
-  ["JML", "Jamalpur Town Railway Station", "Jamalpur"],
-  ["TNG", "Tangail Railway Station", "Tangail"],
-  ["ISD", "Ishwardi Junction", "Ishwardi"],
-  ["JSR", "Jashore Junction", "Jashore"],
-  ["SRE", "Sreemangal Railway Station", "Sreemangal"],
-];
-
-const ROUTE_DEFS = [
-  { name: "Dhaka - Chittagong Main Line", stops: [["DHK", 1], ["BSL", 2], ["AKR", 3], ["LKS", 4], ["COM", 5], ["FNI", 6], ["CTG", 7], ["COX", 8]] },
-  { name: "Dhaka - Sylhet Line", stops: [["DHK", 1], ["BSL", 2], ["SRE", 3], ["SYL", 4]] },
-  { name: "Dhaka - Rajshahi Line", stops: [["DHK", 1], ["TNG", 2], ["ISD", 3], ["RAJ", 4]] },
-  { name: "Dhaka - Khulna Line", stops: [["DHK", 1], ["JSR", 2], ["KHL", 3]] },
-  { name: "Dhaka - Noakhali Connector", stops: [["DHK", 1], ["BSL", 2], ["AKR", 3], ["LKS", 4], ["NOK", 5]] },
-  { name: "Dhaka - Mymensingh Line", stops: [["DHK", 1], ["MYM", 2], ["JML", 3]] },
-];
-
-const TRAIN_DEFS = [
-  {
-    name: "Subarna Express",
-    route: "Dhaka - Chittagong Main Line",
-    start: "07:00",
-    coaches: [
-      { number: 1, type: "Shuvon Chair", capacity: 60 },
-      { number: 2, type: "Shuvon Chair", capacity: 60 },
-      { number: 3, type: "Snigdha", capacity: 44 },
-      { number: 4, type: "AC Chair", capacity: 36 },
-    ],
-  },
-  {
-    name: "Mohanagar Godhuli",
-    route: "Dhaka - Chittagong Main Line",
-    start: "15:00",
-    coaches: [
-      { number: 1, type: "Shuvon Chair", capacity: 60 },
-      { number: 2, type: "Snigdha", capacity: 44 },
-    ],
-  },
-  {
-    name: "Parabat Express",
-    route: "Dhaka - Sylhet Line",
-    start: "06:20",
-    coaches: [
-      { number: 1, type: "Shuvon Chair", capacity: 55 },
-      { number: 2, type: "Snigdha", capacity: 40 },
-      { number: 3, type: "AC Chair", capacity: 30 },
-    ],
-  },
-  {
-    name: "Silk City Express",
-    route: "Dhaka - Rajshahi Line",
-    start: "14:30",
-    coaches: [
-      { number: 1, type: "Shuvon Chair", capacity: 58 },
-      { number: 2, type: "Snigdha", capacity: 42 },
-    ],
-  },
-  {
-    name: "Sundarban Express",
-    route: "Dhaka - Khulna Line",
-    start: "08:15",
-    coaches: [
-      { number: 1, type: "Shuvon Chair", capacity: 58 },
-      { number: 2, type: "Snigdha", capacity: 42 },
-      { number: 3, type: "AC Chair", capacity: 32 },
-    ],
-  },
-  {
-    name: "Titas Express",
-    route: "Dhaka - Chittagong Main Line",
-    start: "10:00",
-    coaches: [
-      { number: 1, type: "Shuvon Chair", capacity: 48 },
-      { number: 2, type: "Snigdha", capacity: 32 },
-    ],
-  },
-  {
-    name: "Meghna Express",
-    route: "Dhaka - Noakhali Connector",
-    start: "08:00",
-    coaches: [
-      { number: 1, type: "Shuvon Chair", capacity: 48 },
-      { number: 2, type: "Snigdha", capacity: 32 },
-    ],
-  },
-  {
-    name: "Brahmaputra Express",
-    route: "Dhaka - Mymensingh Line",
-    start: "16:00",
-    coaches: [
-      { number: 1, type: "Shuvon Chair", capacity: 48 },
-      { number: 2, type: "Snigdha", capacity: 32 },
-    ],
-  },
-  {
-    name: "Madhumati Express",
-    route: "Dhaka - Khulna Line",
-    start: "21:00",
-    coaches: [
-      { number: 1, type: "Shuvon Chair", capacity: 48 },
-      { number: 2, type: "Snigdha", capacity: 32 },
-    ],
-  },
-];
-
-const SEAT_TYPE_CYCLE = ["Window", "Aisle", "Aisle", "Window"];
-const TRIP_DAYS_AHEAD = 31;
+const { syncRailNetwork } = require("./network");
 
 async function run() {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-
-    console.log("Clearing existing data...");
-    await client.query(
-      `TRUNCATE contact_message, payment, ticket, booking, user_auth, users, seat, coach, trip, route_station, train, route, station RESTART IDENTITY CASCADE`
-    );
-
-    console.log("Seeding stations...");
-    for (const [code, name, city] of STATIONS) {
-      await client.query("INSERT INTO station (station_code, station_name, city) VALUES ($1,$2,$3)", [code, name, city]);
-    }
-
-    console.log("Seeding routes...");
-    const routeIds = {};
-    for (const r of ROUTE_DEFS) {
-      const res = await client.query("INSERT INTO route (route_name) VALUES ($1) RETURNING route_id", [r.name]);
-      routeIds[r.name] = res.rows[0].route_id;
-      for (const [code, order] of r.stops) {
-        await client.query("INSERT INTO route_station (route_id, station_code, stop_order) VALUES ($1,$2,$3)", [
-          routeIds[r.name],
-          code,
-          order,
-        ]);
-      }
-    }
-
-    console.log("Seeding trains, coaches and seats...");
-    const trains = [];
-    for (const td of TRAIN_DEFS) {
-      const tRes = await client.query("INSERT INTO train (train_name) VALUES ($1) RETURNING train_id", [td.name]);
-      const train_id = tRes.rows[0].train_id;
-      trains.push({ train_id, route_id: routeIds[td.route], route: td.route, start: td.start });
-
-      const stops = ROUTE_DEFS.find((r) => r.name === td.route).stops;
-      const [startHour, startMinute] = td.start.split(":").map(Number);
-      const startMinutes = startHour * 60 + startMinute;
-      for (let i = 0; i < stops.length; i++) {
-        const [stationCode] = stops[i];
-        const at = startMinutes + i * 90;
-        const fmt = (mins) => `${String(Math.floor((mins % 1440) / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}:00`;
-        const arrival = i === 0 ? fmt(at) : fmt(at - 10);
-        const departure = i === stops.length - 1 ? fmt(at) : fmt(at + 10);
-        await client.query(
-          `INSERT INTO train_station_schedule (train_id, route_id, station_code, arrival_time, departure_time)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [train_id, routeIds[td.route], stationCode, arrival, departure]
-        );
-      }
-
-      for (const c of td.coaches) {
-        const cRes = await client.query(
-          "INSERT INTO coach (train_id, coach_number, coach_type, capacity) VALUES ($1,$2,$3,$4) RETURNING coach_id",
-          [train_id, c.number, c.type, c.capacity]
-        );
-        const coach_id = cRes.rows[0].coach_id;
-        for (let i = 0; i < c.capacity; i++) {
-          const seat_number = String(i + 1).padStart(2, "0");
-          const seat_type = SEAT_TYPE_CYCLE[i % 4];
-          await client.query("INSERT INTO seat (coach_id, seat_number, seat_type) VALUES ($1,$2,$3)", [
-            coach_id,
-            seat_number,
-            seat_type,
-          ]);
-        }
-      }
-    }
-
-    console.log(`Seeding trips (next ${TRIP_DAYS_AHEAD} days)...`);
-    for (let dayOffset = 0; dayOffset < TRIP_DAYS_AHEAD; dayOffset++) {
-      for (const tr of trains) {
-        await client.query(
-          `INSERT INTO trip (train_id, route_id, departure_date, status)
-           VALUES ($1, $2, CURRENT_DATE + $3::int, 'scheduled')`,
-          [tr.train_id, tr.route_id, dayOffset]
-        );
-      }
-    }
-
-    console.log("Seeding demo customer (rahim@example.com / password123)...");
-    const uRes = await client.query(
-      "INSERT INTO users (first_name, last_name, email, role) VALUES ($1,$2,$3,'customer') RETURNING user_id",
-      ["Rahim", "Uddin", "rahim@example.com"]
-    );
-    const hash = await bcrypt.hash("password123", 10);
-    await client.query("INSERT INTO user_auth (user_id, password_hash) VALUES ($1,$2)", [uRes.rows[0].user_id, hash]);
-
-    console.log("Seeding demo admin (admin@example.com / admin123)...");
-    const adminRes = await client.query(
-      "INSERT INTO users (first_name, last_name, email, role) VALUES ($1,$2,$3,'admin') RETURNING user_id",
-      ["Admin", "User", "admin@example.com"]
-    );
-    const adminHash = await bcrypt.hash("admin123", 10);
-    await client.query("INSERT INTO user_auth (user_id, password_hash) VALUES ($1,$2)", [adminRes.rows[0].user_id, adminHash]);
-
+    await client.query(`TRUNCATE contact_message, payment, ticket_refund, ticket, booking, user_auth, auth_session, password_reset_otp, users, seat, coach, trip, train_station_schedule, route_station, train, route, station RESTART IDENTITY CASCADE`);
+    await syncRailNetwork(client);
+    const customer = await client.query("INSERT INTO users (first_name,last_name,email,role) VALUES ('Rahim','Uddin','rahim@example.com','customer') RETURNING user_id");
+    await client.query("INSERT INTO user_auth (user_id,password_hash) VALUES ($1,$2)", [customer.rows[0].user_id, await bcrypt.hash("password123",10)]);
+    const admin = await client.query("INSERT INTO users (first_name,last_name,email,role) VALUES ('Admin','User','admin@example.com','admin') RETURNING user_id");
+    await client.query("INSERT INTO user_auth (user_id,password_hash) VALUES ($1,$2)", [admin.rows[0].user_id, await bcrypt.hash("admin123",10)]);
     await client.query("COMMIT");
     console.log("Seed complete.");
-  } catch (err) {
+  } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Seed failed:", err);
+    console.error("Seed failed:", error.message);
     process.exitCode = 1;
-  } finally {
-    client.release();
-    await pool.end();
-  }
+  } finally { client.release(); await pool.end(); }
 }
-
 run();

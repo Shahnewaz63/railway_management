@@ -1,7 +1,7 @@
 const router = require("express").Router();
 const pool = require("../db/pool");
 const { requireAuth } = require("../middleware/auth");
-const { FARES, HOLD_MINUTES } = require("../config/fares");
+const { calculateFare, HOLD_MINUTES } = require("../config/fares");
 const { isPlainObject, normalizePassengerName, normalizePnr, normalizeStationCode, parsePositiveId, parsePassengerAge } = require("../lib/request-validation");
 
 function httpError(status, message) {
@@ -89,25 +89,26 @@ router.post("/", requireAuth, async (req, res, next) => {
     }
 
     const coachRes = await client.query(
-      `SELECT c.* FROM coach c JOIN trip t ON t.train_id = c.train_id
+      `SELECT c.*, tr.train_category FROM coach c JOIN trip t ON t.train_id = c.train_id
+       JOIN train tr ON tr.train_id=c.train_id
        WHERE c.coach_id = $1 AND t.trip_id = $2`,
       [coachId, tripId]
     );
     if (!coachRes.rowCount) throw httpError(404, "Coach not found.");
     const coach = coachRes.rows[0];
-    const fareEach = FARES[coach.coach_type] ?? 0;
-
     const seatIds = passengers.map((passenger) => passenger.seatId);
     const seatsRes = await client.query("SELECT seat_id FROM seat WHERE coach_id = $1 AND seat_id = ANY($2::int[])", [coachId, seatIds]);
     if (seatsRes.rowCount !== seatIds.length) throw httpError(400, "Every selected seat must belong to the selected coach.");
     const journeyRes = await client.query(
-      `SELECT 1 FROM trip t
+      `SELECT (rs_to.distance_km-rs_from.distance_km) AS distance_km FROM trip t
        JOIN route_station rs_from ON rs_from.route_id = t.route_id AND rs_from.station_code = $2
        JOIN route_station rs_to ON rs_to.route_id = t.route_id AND rs_to.station_code = $3
        WHERE t.trip_id = $1 AND rs_from.stop_order < rs_to.stop_order`,
       [tripId, from, to]
     );
     if (!journeyRes.rowCount) throw httpError(400, "This trip does not serve the selected journey.");
+    const fareEach = calculateFare(journeyRes.rows[0].distance_km, coach.coach_type, coach.train_category);
+    if (!fareEach) throw httpError(400, "Fare information is unavailable for this journey.");
     const takenRes = await client.query(
       `SELECT tk.seat_id FROM ticket tk
        JOIN booking b ON b.pnr_number = tk.pnr_number

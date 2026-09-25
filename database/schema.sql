@@ -21,12 +21,14 @@ CREATE TABLE route_station (
   route_id       INT NOT NULL REFERENCES route(route_id) ON DELETE CASCADE,
   station_code   VARCHAR(10) NOT NULL REFERENCES station(station_code) ON DELETE CASCADE,
   stop_order     INT NOT NULL CHECK (stop_order > 0),
+  distance_km    NUMERIC(7,1) NOT NULL DEFAULT 0 CHECK (distance_km >= 0),
   PRIMARY KEY (route_id, station_code)
 );
 
 CREATE TABLE train (
   train_id       SERIAL PRIMARY KEY,
-  train_name     VARCHAR(100) NOT NULL
+  train_name     VARCHAR(100) NOT NULL,
+  train_category VARCHAR(30) NOT NULL DEFAULT 'Standard'
 );
 
 -- Train-specific local arrival/departure times at every station on its route.
@@ -43,7 +45,7 @@ CREATE TABLE train_station_schedule (
 CREATE TABLE coach (
   coach_id       SERIAL PRIMARY KEY,
   train_id       INT NOT NULL REFERENCES train(train_id) ON DELETE CASCADE,
-  coach_number   INT NOT NULL,
+  coach_number   VARCHAR(8) NOT NULL,
   coach_type     VARCHAR(50) NOT NULL,
   capacity       INT NOT NULL CHECK (capacity > 0),
   UNIQUE (train_id, coach_number)
@@ -71,6 +73,7 @@ CREATE TABLE users (
   first_name     VARCHAR(50)  NOT NULL,
   last_name      VARCHAR(50)  NOT NULL,
   email          VARCHAR(100) NOT NULL UNIQUE,
+  date_of_birth  DATE,
   role           VARCHAR(20)  NOT NULL DEFAULT 'customer'
                  CHECK (role IN ('customer', 'admin'))
 );
