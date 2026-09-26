@@ -7,6 +7,8 @@ router.use(requireAuth);
 
 router.get("/", async (req, res, next) => {
   try {
+    // Repair accounts missing on databases created before wallet provisioning.
+    await pool.query("INSERT INTO wallet_account(user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", [req.user.user_id]);
     const [account, transactions] = await Promise.all([
       pool.query("SELECT balance, updated_at FROM wallet_account WHERE user_id = $1", [req.user.user_id]),
       pool.query(

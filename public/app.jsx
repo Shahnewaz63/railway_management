@@ -1409,6 +1409,7 @@ function AdminPage({ t, currentUser }) {
     ["Administrators", summary.users.admins],
     ["Upcoming scheduled trips", summary.trips.scheduled],
     ["Current bookings", summary.bookings.current],
+    ["Confirmed bookings", summary.bookings.confirmed],
     ["Active payment holds", summary.bookings.pending],
     ["Seats reserved · next 30 days", `${summary.occupancy.reserved} / ${summary.occupancy.capacity}`],
   ];
@@ -1641,11 +1642,14 @@ function AboutPage({ t }) {
   );
 }
 
-function VerifyTicketPage({ t }) {
-  const [form, setForm] = useState({ pnr: "", email: "" });
+function VerifyTicketPage({ t, initialValues = {} }) {
+  const [form, setForm] = useState({ pnr: initialValues.pnr || "", email: initialValues.email || "" });
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    setForm((current) => ({ pnr: initialValues.pnr || current.pnr, email: initialValues.email || current.email }));
+  }, [initialValues.pnr, initialValues.email]);
   const submit = async (event) => {
     event.preventDefault(); setLoading(true); setError(""); setResult(null);
     try {
@@ -1739,7 +1743,7 @@ function CustomerAssistant({ t, stations, page, assistantChoices, assistantPayme
     const destination = assistantDestination(content);
     if (destination) {
       setMessages((current) => [...current, { role: "assistant", content: destination.message }]);
-      onNavigate(destination.page);
+      onNavigate(destination.page, destination.values);
       return;
     }
     const selection = matchAssistantChoice(content, page, assistantChoices);
@@ -1835,6 +1839,13 @@ function WalletPage({ t, ctx, go }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    const prefill = ctx.walletPrefill;
+    if (!prefill) return;
+    if (prefill.amount) setAmount(prefill.amount);
+    if (prefill.method) setMethod(prefill.method);
+    if (prefill.reference) setReference(prefill.reference);
+  }, [ctx.walletPrefill]);
   const load = () => api("/wallet").then(setWallet).catch((e) => setError(e.message));
   useEffect(() => { load(); }, []);
   const topUp = async (event) => {
@@ -1949,11 +1960,21 @@ function ChangePasswordPage({ t, go }) {
 function assistantDestination(message) {
   const text = message.toLowerCase();
   const bangla = assistantUsesBangla(message);
+  const email = message.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || "";
+  const pnr = message.match(/\b(?:pnr|booking\s+reference|ticket)\s*(?:is|:|#|-)?\s*([A-Z0-9]{5,10})\b/i)?.[1] || "";
+  const amountMatch = message.match(/(?:৳|bdt\s*)\s*(\d{1,6}(?:\.\d{1,2})?)|\b(\d{1,6}(?:\.\d{1,2})?)\s*(?:taka|tk|bdt)\b|\b(?:with|amount(?:\s+is)?)\s+(\d{1,6}(?:\.\d{1,2})?)\b/i);
+  const currencyAmount = message.match(/\u09F3\s*(\d{1,6}(?:\.\d{1,2})?)/)?.[1] || "";
+  const amount = (amountMatch && (amountMatch[1] || amountMatch[2] || amountMatch[3])) || currencyAmount;
+  const method = ["bKash", "Nagad", "Card", "Other"].find((value) => text.includes(value.toLowerCase())) || "";
+  const reference = message.match(/\b(?:reference|ref|transaction(?:\s+id)?|trx(?:id)?)\s*[:#-]?\s*([a-z0-9-]{3,100})/i)?.[1] || "";
   if (/\b(my\s+)?(previous|past|upcoming|recent|old|prior)?\s*bookings?\b|\bbooking history\b|\bmy trips\b|আগের বুকিং|আমার বুকিং|বুকিং দেখুন/.test(text)) {
     return { page: "mybookings", message: bangla ? "আপনার বুকিংয়ের পৃষ্ঠা খুলেছি। বিস্তারিত দেখতে কোন আসন্ন বা আগের বুকিংটি খুলতে চান? সাইন ইন চাইলে আগে সাইন ইন করুন।" : "Your bookings page is open. Which upcoming or past booking would you like to open? Sign in if asked." };
   }
   if (/\b(verif\w*|check|validate)\b.*\b(ticket|pnr|booking reference)\b|\b(ticket|pnr)\b.*\b(verif\w*|check|status)\b|\bticket verification\b|টিকিট যাচাই|টিকিট পরীক্ষা|পিএনআর/.test(text)) {
-    return { page: "verify", message: bangla ? "টিকিট যাচাইয়ের পৃষ্ঠা খুলেছি। কোন PNR এবং বুকিংয়ের ইমেইল দিয়ে টিকিটটি যাচাই করবেন?" : "Ticket verification is open. Which PNR and booking email would you like to verify?" };
+    return { page: "verify", values: { pnr, email }, message: bangla ? "টিকিট যাচাইয়ের পৃষ্ঠা খুলেছি। কোন PNR এবং বুকিংয়ের ইমেইল দিয়ে টিকিটটি যাচাই করবেন?" : "Ticket verification is open. Which PNR and booking email would you like to verify?" };
+  }
+  if (/\b(wallet|top[ -]?up|add (?:funds|money|payment)|recharge)\b/i.test(text)) {
+    return { page: "wallet", values: { amount, method, reference }, message: "Wallet opened. I filled in the details I found; review them before adding funds." };
   }
   if (/\b(contact|support|send (a )?message|contact us)\b|যোগাযোগ/.test(text)) {
     return { page: "contact", message: bangla ? "যোগাযোগের পৃষ্ঠা খুলেছি। কী বিষয় ও বার্তা পাঠাতে চান? সাইন ইন চাইলে গ্রাহক হিসেবে সাইন ইন করুন।" : "Contact Us is open. What subject and message would you like to send? Sign in as a customer if asked." };
@@ -2237,10 +2258,12 @@ function App() {
     go("results");
   };
 
-  const navigateFromAssistant = (destination) => {
+  const navigateFromAssistant = (destination, values = {}) => {
     setPendingSearch(null);
     if (destination === "status") { goAnchor("scheduled-trains"); return; }
-    go(destination);
+    if (destination === "wallet") go(destination, { walletPrefill: values });
+    else if (destination === "verify") go(destination, { verifyPrefill: values });
+    else go(destination);
   };
 
   // Enrich ctx with station city names + derived fields whenever we move
@@ -2306,7 +2329,7 @@ function App() {
   } else if (page === "contact" && currentUser?.role === "customer") {
     body = <ContactPage t={t} currentUser={currentUser} />;
   } else if (page === "verify") {
-    body = <VerifyTicketPage t={t} />;
+    body = <VerifyTicketPage t={t} initialValues={ctx.verifyPrefill || {}} />;
   } else if (page === "account" && currentUser) {
     body = <ProfilePage t={t} currentUser={currentUser} go={go} />;
   } else if (page === "editprofile" && currentUser) {

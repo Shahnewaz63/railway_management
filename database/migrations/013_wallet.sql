@@ -2,6 +2,20 @@
 -- gateway; each operation is recorded in an append-only transaction ledger.
 BEGIN;
 
+-- Keep databases upgraded through the wallet migration compatible with the
+-- server's periodic hold-expiration sweep (also defined by migration 012).
+CREATE OR REPLACE PROCEDURE run_booking_maintenance(p_hold_minutes INT DEFAULT 5)
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF p_hold_minutes < 1 THEN
+    RAISE EXCEPTION 'Hold duration must be at least one minute';
+  END IF;
+  UPDATE booking SET booking_status = 'expired'
+   WHERE booking_status = 'pending'
+     AND booking_date <= now() - make_interval(mins => p_hold_minutes);
+END;
+$$;
+
 CREATE TABLE IF NOT EXISTS wallet_account (
   user_id INT PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
   balance NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (balance >= 0),
